@@ -1,0 +1,20 @@
+[package]
+name = "locallyai-worker"
+version = "1.0.0"
+description = "LocallyAI Workspace — firm-deployed legal AI client"
+authors = ["LocallyAI"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "locallyai_worker_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

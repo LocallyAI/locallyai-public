@@ -1,0 +1,61 @@
+{
+  "//": "LuLu (Objective-See) rules for LocallyAI's allowed outbound connections.",
+  "//": "Import via LuLu → Preferences → Rules → Import. Edit the host list",
+  "//": "below to match docs/egress-allowlist/README.md if a release adds destinations.",
+  "rules": [
+    {
+      "process": "/Users/*/locallyai/.venv/bin/python*",
+      "action": "allow",
+      "endpoints": [
+        "github.com",
+        "api.github.com",
+        "raw.githubusercontent.com",
+        "objects.githubusercontent.com",
+        "huggingface.co",
+        "cdn-lfs.huggingface.co"
+      ],
+      "comment": "API server, sentinel, ingest, system_updates, llm_models"
+    },
+    {
+      "process": "/opt/homebrew/bin/gh",
+      "action": "allow",
+      "endpoints": ["github.com", "api.github.com", "raw.githubusercontent.com", "objects.githubusercontent.com"],
+      "comment": "Release pulls + manifest downloads"
+    },
+    {
+      "process": "/opt/homebrew/bin/git",
+      "action": "allow",
+      "endpoints": ["github.com"],
+      "comment": "git fetch --tags during release verification"
+    },
+    {
+      "process": "/usr/bin/curl",
+      "action": "allow",
+      "endpoints": [
+        "github.com",
+        "raw.githubusercontent.com",
+        "huggingface.co",
+        "cdn-lfs.huggingface.co"
+      ],
+      "comment": "Sentinel + install.sh probes"
+    },
+    {
+      "process": "/Users/*/locallyai/apps/*/node_modules/.bin/node*",
+      "action": "allow",
+      "endpoints": ["localhost", "127.0.0.1"],
+      "comment": "vite dev server — only ever talks to loopback"
+    },
+    {
+      "//": "Kill-switch CF Worker — replace <your-worker-host> with the actual",
+      "//": "subdomain printed by `wrangler deploy`.",
+      "process": "/Users/*/locallyai/.venv/bin/python*",
+      "action": "allow",
+      "endpoints": ["<your-worker-host>.workers.dev"],
+      "comment": "kill_switch.py poll"
+    }
+  ],
+  "default_action": "prompt",
+  "//": "default_action=prompt means anything not on the list pops a LuLu",
+  "//": "dialog. Switch to 'block' for fully-silent enforcement once you've",
+  "//": "confirmed the allowlist covers all legitimate traffic."
+}

@@ -1,0 +1,20 @@
+name = "locallyai-killswitch"
+main = "src/worker.ts"
+compatibility_date = "2025-09-01"
+# No nodejs_compat — we only use Web Crypto APIs (crypto.subtle), native
+# to Cloudflare Workers.
+
+# KV namespace holding the single status JSON. Operator binds this once
+# at deploy time (see README): `npx wrangler kv namespace create killswitch_state`
+# then paste the printed `id` into the value below. The `binding` name
+# (KILLSWITCH) is what env.KILLSWITCH refers to inside worker.ts.
+[[kv_namespaces]]
+binding = "KILLSWITCH"
+id      = "REPLACE_WITH_YOUR_OWN_KV_NAMESPACE_ID"
+
+# Secrets (NOT in this file — set via `wrangler secret put`):
+#   TOTP_SECRET_BASE32        from scripts/kill_switch_totp_setup.sh
+#   RECOVERY_CODES_HASHED     JSON array of sha256(code) strings
+
+[observability]
+enabled = true

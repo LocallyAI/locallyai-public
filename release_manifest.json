@@ -1,0 +1,906 @@
+{
+  "version": "0.1.0",
+  "channel": "dev",
+  "tier": "C",
+  "released_at": "2026-05-10T11:36:40Z",
+  "changelog_summary": "first signed release",
+  "artifacts": [
+    {
+      "name": "api.py",
+      "sha256": "8110349e91365221131b173bd53950107040aded824010ae351d27d038f0b432",
+      "size": 83193
+    },
+    {
+      "name": "bm25.py",
+      "sha256": "88890fa3aa3775981baddc80d5682b6f2116a926018622de1d046cdb5f57d764",
+      "size": 3355
+    },
+    {
+      "name": "chat.py",
+      "sha256": "b4d88a48d3e72fc72949b8c10c9ed24d89a92c70d7afd5cd1615f007b57f3a37",
+      "size": 8451
+    },
+    {
+      "name": "chunked_uploads.py",
+      "sha256": "e1e46bab8fc5e0382fad459179e0b6c0d79e881d144b5220c8d67075cfbf4580",
+      "size": 16599
+    },
+    {
+      "name": "client_installers.py",
+      "sha256": "e161d7bbce8271afc9b5bca04a05d15baf70e1c4f3c46556882348e790bfb890",
+      "size": 12594
+    },
+    {
+      "name": "config.py",
+      "sha256": "9b75a658b1d5104eb8e7fbec7f8ada3b8c005830a968bcbbd6a157296f952ed1",
+      "size": 27532
+    },
+    {
+      "name": "deploy.py",
+      "sha256": "6b215ef529c07f5c49808dbcbe5e7a2dca749aed422e668248fd4222b166a203",
+      "size": 12026
+    },
+    {
+      "name": "embed_local.py",
+      "sha256": "63cd118f7e880de469f39498e5419ec330ca8269b3b0a92e1ea753da4291edcc",
+      "size": 2894
+    },
+    {
+      "name": "fleet.py",
+      "sha256": "d835892d31d7ad51da014624db5e60d95317aaa4ad97bb6b4cecbe4a52e1a2c7",
+      "size": 5512
+    },
+    {
+      "name": "inference_gate.py",
+      "sha256": "9d16c3ba3ada7c33cec51d07086871310edd3a4a30c93fe52ff5d9ec03d56007",
+      "size": 5024
+    },
+    {
+      "name": "ingest.py",
+      "sha256": "2632f329f96b26f48cd74af101bf6f555eebdf8ef22511a671a3df00beb13554",
+      "size": 10239
+    },
+    {
+      "name": "ingest_queue.py",
+      "sha256": "5756a8aeca9e80e34eea3b7cfa303693e26fdb607d782d6ee1b4da07d129a5c8",
+      "size": 7456
+    },
+    {
+      "name": "kill_switch.py",
+      "sha256": "8945f959514e245e65838bab7b53245921180ed22818926dba5cd53fb6434c79",
+      "size": 6731
+    },
+    {
+      "name": "llm_models.py",
+      "sha256": "59b1f6c94eb9b378f028d55cb7845d240d3fb5a0520022c5857ddd2a224fe869",
+      "size": 10571
+    },
+    {
+      "name": "manage_users.py",
+      "sha256": "b5f83e777652c37508c41103b0cf0d65cd353a2159dac42bfc0dde317ec42aff",
+      "size": 26776
+    },
+    {
+      "name": "mlx_inference.py",
+      "sha256": "6543b6c78ea70d3857e91135d84295b5312a188ea787e82034e027b2d75e7fe0",
+      "size": 12819
+    },
+    {
+      "name": "os_supervisor.py",
+      "sha256": "99817b588356bb009103f9aed180fb9f248870f4c5603541c6e073788bad54a1",
+      "size": 5902
+    },
+    {
+      "name": "platform_compat.py",
+      "sha256": "eb573d04a192a80c4d67df4fdb2560cf11f1b0032128f4842426cb219d08e59a",
+      "size": 2559
+    },
+    {
+      "name": "retrieval.py",
+      "sha256": "03098d8440cbdf7b80187cc1d4418267149f299af4971c8aac3fb3e76ad9aca0",
+      "size": 9347
+    },
+    {
+      "name": "service.py",
+      "sha256": "19a53d898816ecdde6a233304792a835b84b067df26ac6445f41abb19bd83410",
+      "size": 3499
+    },
+    {
+      "name": "shared_lock.py",
+      "sha256": "6f7d8ce43f1b1a625f1c8585464aa95d4bcd78f4e3aa37f6ee7dc8888e2fc586",
+      "size": 3336
+    },
+    {
+      "name": "supervisor.py",
+      "sha256": "81cf55ec0c40629ea853d841e9a1cff878515556d9818f8504c5a201a1df5047",
+      "size": 17968
+    },
+    {
+      "name": "sync_conflicts.py",
+      "sha256": "ccad10b122a50e4b419d9472c489d2139732fc5c6ab2bc119106559b07faf22d",
+      "size": 3404
+    },
+    {
+      "name": "system_updates.py",
+      "sha256": "8acaf6598c4394fc95720484fe914d14711629ed091f628189e5244ce2751395",
+      "size": 16219
+    },
+    {
+      "name": "test.py",
+      "sha256": "92e4083061668ebd4b8532ca3d11cd422bd451fd954f7653cd2af214833e3087",
+      "size": 4209
+    },
+    {
+      "name": "watchdog/__init__.py",
+      "sha256": "b42f2099187886def637d6aa840022266e05cb6c987a9394e708e23cd505eb46",
+      "size": 4
+    },
+    {
+      "name": "watchdog/alerting.py",
+      "sha256": "b3b76ea658a8727c3b2d2fcfa11e5cdb4acb905fe2e87b5a56afdcd625b0717a",
+      "size": 2803
+    },
+    {
+      "name": "watchdog/diagnostician.py",
+      "sha256": "6f25b97258a67cd513ece2c5549405325367300a29f6d81e34cc9dab40a96d87",
+      "size": 8467
+    },
+    {
+      "name": "watchdog/heartbeat.py",
+      "sha256": "d1bc8517a05317eea5b201bae4ba2ff2acd34177903dedd06a9b04f6737f1722",
+      "size": 4947
+    },
+    {
+      "name": "watchdog/resurrector.py",
+      "sha256": "f15e150cf7196387dd97702991c5833c805e12f72910842d6bbba459de796ce2",
+      "size": 8551
+    },
+    {
+      "name": "watchdog/sentinel.py",
+      "sha256": "b1b9f0b8d949da255f9ec7e9a93d182ec199b1fdb9fa11a547840452a8e74ce3",
+      "size": 19294
+    },
+    {
+      "name": "audit_export/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "name": "audit_export/audit_export.py",
+      "sha256": "9fe54115407f8e5a2816179ea01beb269c2247837bc52c6542b90c1fd37dd0ca",
+      "size": 5895
+    },
+    {
+      "name": "monitoring/__init__.py",
+      "sha256": "b42f2099187886def637d6aa840022266e05cb6c987a9394e708e23cd505eb46",
+      "size": 4
+    },
+    {
+      "name": "monitoring/monitor.py",
+      "sha256": "9a77f6532845e1234af0fb8f9a2d2dad0267e009ea4cfec04e80675a668422f3",
+      "size": 5714
+    },
+    {
+      "name": "billing/__init__.py",
+      "sha256": "b42f2099187886def637d6aa840022266e05cb6c987a9394e708e23cd505eb46",
+      "size": 4
+    },
+    {
+      "name": "billing/metering.py",
+      "sha256": "79fa2aac59888ff3c5b296d9617f42501c5d383a20f7e5a01a857f6edf6a1e02",
+      "size": 5515
+    },
+    {
+      "name": "apps/worker-ui/src/components/locally/Composer.tsx",
+      "sha256": "d84126b59bd0d35c1b15945df3e3b73e81217abec7273c36a464488997e1a3f1",
+      "size": 6780
+    },
+    {
+      "name": "apps/worker-ui/src/components/locally/FileTypeIcon.tsx",
+      "sha256": "fc34b3f28dafe678c562e3174d3d1faa2cbe96f943787746d14f741b362b396c",
+      "size": 1220
+    },
+    {
+      "name": "apps/worker-ui/src/components/locally/IngestStatusTicker.tsx",
+      "sha256": "c41e491e29c3bc9c0c53c2563e5db52da13aa38a47436f3dc364c4d3030745b5",
+      "size": 3867
+    },
+    {
+      "name": "apps/worker-ui/src/components/locally/LoginGate.tsx",
+      "sha256": "3c5cbaa599dc024ee1ebf7f4150f991251cd4ccc96d4094e978965b3ac2cc02e",
+      "size": 11571
+    },
+    {
+      "name": "apps/worker-ui/src/components/locally/Message.tsx",
+      "sha256": "a63707b4ce40dca130db476b90673b277c36dd2f7bbcbe160f9c3e97eeb18978",
+      "size": 5456
+    },
+    {
+      "name": "apps/worker-ui/src/components/locally/RecentDocuments.tsx",
+      "sha256": "40c2a177b0281df283d62844978d6de73433ae64f321eda918073d418f58a719",
+      "size": 5162
+    },
+    {
+      "name": "apps/worker-ui/src/components/locally/Sidebar.tsx",
+      "sha256": "b4c1a7e1f499b7b6e60ad7da3aa41dd7129b408ed5b2e813988dcfdee70fbaf1",
+      "size": 8368
+    },
+    {
+      "name": "apps/worker-ui/src/components/locally/SourcesPanel.tsx",
+      "sha256": "555cc67071254a0b4f3ff832a838e52b6e7b64d25c2ddff73a2d7c767cd8a746",
+      "size": 3824
+    },
+    {
+      "name": "apps/worker-ui/src/components/locally/UploadChip.tsx",
+      "sha256": "7432c0b83982757fcbb42bad7351536fbedc36fc4251de7f7f23ec725379d46e",
+      "size": 5302
+    },
+    {
+      "name": "apps/worker-ui/src/components/locally/UploadDropZone.tsx",
+      "sha256": "5c2512178718dcc98a6bb1799d9832b4655acd64dde2464b928e9c0f5a583244",
+      "size": 3851
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/accordion.tsx",
+      "sha256": "495a09b5ec67a59964d823408eded08a0cad048f38e8d31e4b525482527c4210",
+      "size": 2000
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/alert-dialog.tsx",
+      "sha256": "f9bf10a2af7b3908e163bd41998d70503054e7c13b2ba7dccf964c83a0d20746",
+      "size": 4351
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/alert.tsx",
+      "sha256": "e7f4c2e6f78c59270905b4152b7d3ef4d5c6b9e3b2d370daa7b301aa7cbd27b3",
+      "size": 1589
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/aspect-ratio.tsx",
+      "sha256": "d72c73d629e37995a0a71647d851d68d6fdcd7ec120797f36ab83a8ee89f2cab",
+      "size": 143
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/avatar.tsx",
+      "sha256": "0326c9041c5a0b1ba31ff29822c51950b6aeac485cd0985e7df714741a54e7f4",
+      "size": 1413
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/badge.tsx",
+      "sha256": "6519775252fe729f21c60b92c7c9feefd1fe7d0a8c2cf16d6f1c2fa7e153fe75",
+      "size": 1123
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/breadcrumb.tsx",
+      "sha256": "d5224e87344b3ac0f8b002e5dda6a71ff8fee296db8a5fbe6b034d06bd5c2ae1",
+      "size": 2749
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/button.tsx",
+      "sha256": "02f370077cf974d5cd85bc2f07473b33710fd7dffb406b6832954c7f2b24044f",
+      "size": 1851
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/calendar.tsx",
+      "sha256": "3205837b76f652de06126eb65ab7af601013ca989025cd21ed4cda33bd780b46",
+      "size": 7210
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/card.tsx",
+      "sha256": "f13878a0078a5ef9f3e92af29259fc1e93ea56ea80cb992e0c4dea4e35396459",
+      "size": 1817
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/carousel.tsx",
+      "sha256": "568e00e8edbfab8af67ee902ca9ef5ceb6d5ed6f3045e7f9b3c15b4f7ef9e974",
+      "size": 6200
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/chart.tsx",
+      "sha256": "81b1f692f9334ba3030213ff37eeaf2dd762b644e5d96e51ada7072109f07430",
+      "size": 10570
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/checkbox.tsx",
+      "sha256": "3a68012d1aae3ed5d6ba57ca3695694399fbb5bd5614ebeba19eec92a8be5194",
+      "size": 1028
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/collapsible.tsx",
+      "sha256": "5f0a45d8f6ca72d37ed10bf0a85306158b67d7cbc386319186ce013ead9bc0a6",
+      "size": 335
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/command.tsx",
+      "sha256": "ba8c0f8b23044ce9a5066e66d7ab7be3a3c79bfc4a0ab7dfae6ffafe439145a3",
+      "size": 4876
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/context-menu.tsx",
+      "sha256": "9ba8c0fc29c25f440a1d8806e16d42c1083e9909e7ed1f1b9b0deb2ae00e1d13",
+      "size": 7391
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/dialog.tsx",
+      "sha256": "fcd2d5d066cac62c9e1a3bfcc78d4b9e93fd0c5f46f70d4d526849f9ba799c3e",
+      "size": 3801
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/drawer.tsx",
+      "sha256": "478c487f66245641d5fa0f0d1c53a07d68bd60c4b3c497ec4c41ce08b482e14b",
+      "size": 2973
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/dropdown-menu.tsx",
+      "sha256": "c6eb5ff28e5bc3cdbe38a11d680aae56d885285e4aca7c8288609811effc04cb",
+      "size": 7596
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/form.tsx",
+      "sha256": "1ed53d4ab564a64708938643de590f2bef3718b0b2a309c1019c57e9c1fde23f",
+      "size": 4201
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/hover-card.tsx",
+      "sha256": "69dc172ece56ac77bf3a044a1cd60ed601b0041945d16b5da4c6cc4f42116988",
+      "size": 1246
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/input-otp.tsx",
+      "sha256": "9b94ff8e296ba320ebec6550e0fd1a9763132d7edfa4cac842d4ca926dd5f2e3",
+      "size": 2161
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/input.tsx",
+      "sha256": "92debb7d6d2d96d9e607a42d5ce8f37b2d63384ae5dd9ffbbf5f047b680ffb85",
+      "size": 776
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/label.tsx",
+      "sha256": "9f72e2ecf16206593aa9e3c4fbc14cd8e81aa8488d57d92d4a950b30935a9fa9",
+      "size": 716
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/menubar.tsx",
+      "sha256": "e8a3269de7348e04dc1335cf6227bdcdaf2649484da4654f6a6b20f1c8423a84",
+      "size": 8546
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/navigation-menu.tsx",
+      "sha256": "2e8088de1529d344e2094f8cb5aee325ef5e1b386eae5ab6249daaa9f2ab526d",
+      "size": 5109
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/pagination.tsx",
+      "sha256": "cbe8559c578ee2d34c7daef5ee75dc3afeb795851e294b111dec375ba44a9a2d",
+      "size": 2739
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/popover.tsx",
+      "sha256": "861c18577ea5988c6f5ca00d1c677200319fd427cf8b424e59a5cca6ff24f830",
+      "size": 1352
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/progress.tsx",
+      "sha256": "418f612946a520d1380b7a0d058185bb6a6d09846846dd6d6904a0016152dd4a",
+      "size": 781
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/radio-group.tsx",
+      "sha256": "898d078c41e4608b2ff93fec5728c3c42774c047a6ddfcb1537d87097da95a2c",
+      "size": 1390
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/resizable.tsx",
+      "sha256": "f0399fec7bc334f06433b41b6ebf34255942ce4916b99173898893fa7fcc8281",
+      "size": 1552
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/scroll-area.tsx",
+      "sha256": "b607f562455152a079d70a22538c95072b0267e0d59a1a1cf16a905a2e373a6f",
+      "size": 1635
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/select.tsx",
+      "sha256": "093f04f75e4c39c495e54a2d3f344932b9467ef79ee304322b7512630e5c546b",
+      "size": 5734
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/separator.tsx",
+      "sha256": "bf5838b692e5f74fde7083280b99492dd402bce6966e912e79f5e23f14bc98eb",
+      "size": 723
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/sheet.tsx",
+      "sha256": "281978e3db989182cc557b1e70882c3eaae25d837874cfc57b6120b8a297891a",
+      "size": 4233
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/sidebar.tsx",
+      "sha256": "23251cb423bddac649649a0a7701d5d22a8b9efca85bb55dcf17f62c196d9bff",
+      "size": 23859
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/skeleton.tsx",
+      "sha256": "f4c42257d73925b0b856a3500e2cbdd918fe6744fcd6be87ef28bb88e7eb7366",
+      "size": 239
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/slider.tsx",
+      "sha256": "d307cf3ff05b54be4a04389ef4379f9e8b4dc49720197937991ce843a8d4b5ec",
+      "size": 1025
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/sonner.tsx",
+      "sha256": "3ad40f66c339e799b1a57c00e10b4627294c7d580d99d8a48ae0d8d4c13cf931",
+      "size": 734
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/switch.tsx",
+      "sha256": "c3c298df4ffb56695e4a8f0ff3e37eee08437dec542a677153ec16bed0820107",
+      "size": 1156
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/table.tsx",
+      "sha256": "1e945e564c2cc5ca3ef33019ba7da7a8b94cbc73feb3cbc2b7b33c36ea648d92",
+      "size": 2820
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/tabs.tsx",
+      "sha256": "0c0d6eccf3298cd2f356d47dc14efed4885ef9f8616bb10e1e95e9181e6a2fb8",
+      "size": 1891
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/textarea.tsx",
+      "sha256": "35617a2cf053e52c9e56983bde82d556861d38e462f9e578876c8e99a0432687",
+      "size": 677
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/toggle-group.tsx",
+      "sha256": "d59cd3937c967a3e221fdfcfe4ea5cd57eb97cbe37e1ac98126664c9c7db49c1",
+      "size": 1752
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/toggle.tsx",
+      "sha256": "2790fa08560caeb69b4fdc7e663be2089bd4c6e028edac4eee57d851f9fe0816",
+      "size": 1491
+    },
+    {
+      "name": "apps/worker-ui/src/components/ui/tooltip.tsx",
+      "sha256": "9682690fc3755d0f4b8684f2d7b1f77945876d41a45b723d0761b26804ad5010",
+      "size": 1278
+    },
+    {
+      "name": "apps/worker-ui/src/hooks/use-mobile.tsx",
+      "sha256": "21eff740f9e5c965c7f0782925a7e8f67ddfcdf0f58b6613550f99c3e1c454e9",
+      "size": 576
+    },
+    {
+      "name": "apps/worker-ui/src/hooks/use-uploads.ts",
+      "sha256": "0b3eae98db1204a3a8f006ee4dfb3b8c67905252a4ae5f914f98bce6eaef4bf9",
+      "size": 11257
+    },
+    {
+      "name": "apps/worker-ui/src/i18n/ar.json",
+      "sha256": "ab7926609eb6eccd368b561c71a9ec2e2ba95782d2523f0355549a5e252ac20c",
+      "size": 2398
+    },
+    {
+      "name": "apps/worker-ui/src/i18n/en.json",
+      "sha256": "27ccfd6907e9b92df27972b030a32ac156c2a8f078f56c1a8985c67b6631ef6b",
+      "size": 1836
+    },
+    {
+      "name": "apps/worker-ui/src/lib/api.ts",
+      "sha256": "1bb270aafcf33bc1ac4c3a07c1ccf39828836fc11dfe3fd0abc84766fd7fb450",
+      "size": 22186
+    },
+    {
+      "name": "apps/worker-ui/src/lib/auth.ts",
+      "sha256": "c3921f815ab830f5fbcfaa4d6e720d07b95e05553997705b93d1c8157ecee8f9",
+      "size": 779
+    },
+    {
+      "name": "apps/worker-ui/src/lib/format.ts",
+      "sha256": "bf7312316abdb96316f17b83f0896d5afe463b06c42eba234655bb716bb0cf7c",
+      "size": 2742
+    },
+    {
+      "name": "apps/worker-ui/src/lib/i18n.ts",
+      "sha256": "6bc95f66e70c94a208c733679bf482024dfde397fe3cdb9f6334e3f3eab0d811",
+      "size": 2961
+    },
+    {
+      "name": "apps/worker-ui/src/lib/utils.ts",
+      "sha256": "d1f1e0d62cb8d8d1e04c26e14de842d8a151f75812d81b046c65b5d1fe8e4b27",
+      "size": 169
+    },
+    {
+      "name": "apps/worker-ui/src/routeTree.gen.ts",
+      "sha256": "f4a843c61899ede2abbc4a7153e6a00557765f737b724b152463c533c4e0ddb0",
+      "size": 1741
+    },
+    {
+      "name": "apps/worker-ui/src/router.tsx",
+      "sha256": "efd7861d07955652ff94a39d91831a386e7665563d88366fe8f3dc6c048e3aef",
+      "size": 2497
+    },
+    {
+      "name": "apps/worker-ui/src/routes/__root.tsx",
+      "sha256": "54dea824e53ad7abeeadcac9523453c1d6271539a994b31d772425d4198c5fc4",
+      "size": 2967
+    },
+    {
+      "name": "apps/worker-ui/src/routes/index.tsx",
+      "sha256": "03b7e47c518581ca4e2d81690f75e51299f5d8b843e0238f96fd8fe4f45319dd",
+      "size": 18561
+    },
+    {
+      "name": "apps/worker-ui/src/styles.css",
+      "sha256": "51fc02d1485f27fe017a88d65003e28ff0e6bf8209bdbca79b6347a2271ff564",
+      "size": 3179
+    },
+    {
+      "name": "apps/manager-ui/src/components/AppSidebar.tsx",
+      "sha256": "e767a1cb2c97504f5730e9f30f7f49786e3138f65c6ec2b65a3ba709140e7465",
+      "size": 3889
+    },
+    {
+      "name": "apps/manager-ui/src/components/LoginGate.tsx",
+      "sha256": "95af0b272c46c2627b3f0897e900334b95ba0cdf4d816dc048fa4d7565651646",
+      "size": 5377
+    },
+    {
+      "name": "apps/manager-ui/src/components/StatCard.tsx",
+      "sha256": "6e97376f752727182775fb49a8c898c726cf60360312e80a6bf2443eadf7cbfa",
+      "size": 1077
+    },
+    {
+      "name": "apps/manager-ui/src/components/TopBar.tsx",
+      "sha256": "b35d45954d4a52f5def947b3b2902cca13516f64f3b433193674cfdfa9e5ff93",
+      "size": 1589
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/accordion.tsx",
+      "sha256": "495a09b5ec67a59964d823408eded08a0cad048f38e8d31e4b525482527c4210",
+      "size": 2000
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/alert-dialog.tsx",
+      "sha256": "f9bf10a2af7b3908e163bd41998d70503054e7c13b2ba7dccf964c83a0d20746",
+      "size": 4351
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/alert.tsx",
+      "sha256": "e7f4c2e6f78c59270905b4152b7d3ef4d5c6b9e3b2d370daa7b301aa7cbd27b3",
+      "size": 1589
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/aspect-ratio.tsx",
+      "sha256": "d72c73d629e37995a0a71647d851d68d6fdcd7ec120797f36ab83a8ee89f2cab",
+      "size": 143
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/avatar.tsx",
+      "sha256": "0326c9041c5a0b1ba31ff29822c51950b6aeac485cd0985e7df714741a54e7f4",
+      "size": 1413
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/badge.tsx",
+      "sha256": "6519775252fe729f21c60b92c7c9feefd1fe7d0a8c2cf16d6f1c2fa7e153fe75",
+      "size": 1123
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/breadcrumb.tsx",
+      "sha256": "d5224e87344b3ac0f8b002e5dda6a71ff8fee296db8a5fbe6b034d06bd5c2ae1",
+      "size": 2749
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/button.tsx",
+      "sha256": "02f370077cf974d5cd85bc2f07473b33710fd7dffb406b6832954c7f2b24044f",
+      "size": 1851
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/calendar.tsx",
+      "sha256": "3205837b76f652de06126eb65ab7af601013ca989025cd21ed4cda33bd780b46",
+      "size": 7210
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/card.tsx",
+      "sha256": "f13878a0078a5ef9f3e92af29259fc1e93ea56ea80cb992e0c4dea4e35396459",
+      "size": 1817
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/carousel.tsx",
+      "sha256": "568e00e8edbfab8af67ee902ca9ef5ceb6d5ed6f3045e7f9b3c15b4f7ef9e974",
+      "size": 6200
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/chart.tsx",
+      "sha256": "81b1f692f9334ba3030213ff37eeaf2dd762b644e5d96e51ada7072109f07430",
+      "size": 10570
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/checkbox.tsx",
+      "sha256": "3a68012d1aae3ed5d6ba57ca3695694399fbb5bd5614ebeba19eec92a8be5194",
+      "size": 1028
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/collapsible.tsx",
+      "sha256": "5f0a45d8f6ca72d37ed10bf0a85306158b67d7cbc386319186ce013ead9bc0a6",
+      "size": 335
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/command.tsx",
+      "sha256": "1c81c4779676655bda5903ef34edb6aa6857deac164b8a31fb48bfad776ed447",
+      "size": 4876
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/context-menu.tsx",
+      "sha256": "1de6229c67de95b52d9149a7ce9ae92a25d2b49ef0493de25bbd33d21aa32369",
+      "size": 7393
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/dialog.tsx",
+      "sha256": "98ae5f21b1aba9233b5ac958a544ce939bcae2c62b8924cb214666e6fb2f9d1a",
+      "size": 3799
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/drawer.tsx",
+      "sha256": "478c487f66245641d5fa0f0d1c53a07d68bd60c4b3c497ec4c41ce08b482e14b",
+      "size": 2973
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/dropdown-menu.tsx",
+      "sha256": "7cc367ca6375445efb66b9054fac3e2d907966ff75c188ea571bfa861a4b1f9c",
+      "size": 7598
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/form.tsx",
+      "sha256": "1ed53d4ab564a64708938643de590f2bef3718b0b2a309c1019c57e9c1fde23f",
+      "size": 4201
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/hover-card.tsx",
+      "sha256": "69dc172ece56ac77bf3a044a1cd60ed601b0041945d16b5da4c6cc4f42116988",
+      "size": 1246
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/input-otp.tsx",
+      "sha256": "9b94ff8e296ba320ebec6550e0fd1a9763132d7edfa4cac842d4ca926dd5f2e3",
+      "size": 2161
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/input.tsx",
+      "sha256": "92debb7d6d2d96d9e607a42d5ce8f37b2d63384ae5dd9ffbbf5f047b680ffb85",
+      "size": 776
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/label.tsx",
+      "sha256": "9f72e2ecf16206593aa9e3c4fbc14cd8e81aa8488d57d92d4a950b30935a9fa9",
+      "size": 716
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/menubar.tsx",
+      "sha256": "9d51bd6f62f2d5ef5674a7376b7373ccd15998f68e61db579966f5a68ce74156",
+      "size": 8548
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/navigation-menu.tsx",
+      "sha256": "b7f19cb5d7f7e0a7652723988772afa838abe51339056ae9cded70328bf08dc7",
+      "size": 5109
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/pagination.tsx",
+      "sha256": "cbe8559c578ee2d34c7daef5ee75dc3afeb795851e294b111dec375ba44a9a2d",
+      "size": 2739
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/popover.tsx",
+      "sha256": "861c18577ea5988c6f5ca00d1c677200319fd427cf8b424e59a5cca6ff24f830",
+      "size": 1352
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/progress.tsx",
+      "sha256": "418f612946a520d1380b7a0d058185bb6a6d09846846dd6d6904a0016152dd4a",
+      "size": 781
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/radio-group.tsx",
+      "sha256": "898d078c41e4608b2ff93fec5728c3c42774c047a6ddfcb1537d87097da95a2c",
+      "size": 1390
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/resizable.tsx",
+      "sha256": "f0399fec7bc334f06433b41b6ebf34255942ce4916b99173898893fa7fcc8281",
+      "size": 1552
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/scroll-area.tsx",
+      "sha256": "b607f562455152a079d70a22538c95072b0267e0d59a1a1cf16a905a2e373a6f",
+      "size": 1635
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/select.tsx",
+      "sha256": "bb8975863e04a96091b270ca2a34e1bd6c83246214ebf700f3bb1c7c798159b3",
+      "size": 5732
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/separator.tsx",
+      "sha256": "bf5838b692e5f74fde7083280b99492dd402bce6966e912e79f5e23f14bc98eb",
+      "size": 723
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/sheet.tsx",
+      "sha256": "637fa709d97f1fa0a76308bf6fd4c7ba5ef8261f614b5c990e108997c001a2f7",
+      "size": 4231
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/sidebar.tsx",
+      "sha256": "23251cb423bddac649649a0a7701d5d22a8b9efca85bb55dcf17f62c196d9bff",
+      "size": 23859
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/skeleton.tsx",
+      "sha256": "f4c42257d73925b0b856a3500e2cbdd918fe6744fcd6be87ef28bb88e7eb7366",
+      "size": 239
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/slider.tsx",
+      "sha256": "d307cf3ff05b54be4a04389ef4379f9e8b4dc49720197937991ce843a8d4b5ec",
+      "size": 1025
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/sonner.tsx",
+      "sha256": "3ad40f66c339e799b1a57c00e10b4627294c7d580d99d8a48ae0d8d4c13cf931",
+      "size": 734
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/switch.tsx",
+      "sha256": "c3c298df4ffb56695e4a8f0ff3e37eee08437dec542a677153ec16bed0820107",
+      "size": 1156
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/table.tsx",
+      "sha256": "1e945e564c2cc5ca3ef33019ba7da7a8b94cbc73feb3cbc2b7b33c36ea648d92",
+      "size": 2820
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/tabs.tsx",
+      "sha256": "0c0d6eccf3298cd2f356d47dc14efed4885ef9f8616bb10e1e95e9181e6a2fb8",
+      "size": 1891
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/textarea.tsx",
+      "sha256": "35617a2cf053e52c9e56983bde82d556861d38e462f9e578876c8e99a0432687",
+      "size": 677
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/toggle-group.tsx",
+      "sha256": "d59cd3937c967a3e221fdfcfe4ea5cd57eb97cbe37e1ac98126664c9c7db49c1",
+      "size": 1752
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/toggle.tsx",
+      "sha256": "2790fa08560caeb69b4fdc7e663be2089bd4c6e028edac4eee57d851f9fe0816",
+      "size": 1491
+    },
+    {
+      "name": "apps/manager-ui/src/components/ui/tooltip.tsx",
+      "sha256": "9682690fc3755d0f4b8684f2d7b1f77945876d41a45b723d0761b26804ad5010",
+      "size": 1278
+    },
+    {
+      "name": "apps/manager-ui/src/hooks/use-mobile.tsx",
+      "sha256": "21eff740f9e5c965c7f0782925a7e8f67ddfcdf0f58b6613550f99c3e1c454e9",
+      "size": 576
+    },
+    {
+      "name": "apps/manager-ui/src/hooks/use-uploads.ts",
+      "sha256": "409506c29170d47b88406749a327335d5d982763e1a7a5897f447ff90e605060",
+      "size": 7563
+    },
+    {
+      "name": "apps/manager-ui/src/i18n/ar.json",
+      "sha256": "ab7926609eb6eccd368b561c71a9ec2e2ba95782d2523f0355549a5e252ac20c",
+      "size": 2398
+    },
+    {
+      "name": "apps/manager-ui/src/i18n/en.json",
+      "sha256": "27ccfd6907e9b92df27972b030a32ac156c2a8f078f56c1a8985c67b6631ef6b",
+      "size": 1836
+    },
+    {
+      "name": "apps/manager-ui/src/lib/api.ts",
+      "sha256": "2872e32c01de58afd8609db31d69ae55ba0d4b69644d9c845b0ce9c6a11d65eb",
+      "size": 17453
+    },
+    {
+      "name": "apps/manager-ui/src/lib/auth.ts",
+      "sha256": "e53d19bfddcd92e204778719e691f4a7ddee53560218ef5c19070221d9d4d341",
+      "size": 803
+    },
+    {
+      "name": "apps/manager-ui/src/lib/format.ts",
+      "sha256": "bf7312316abdb96316f17b83f0896d5afe463b06c42eba234655bb716bb0cf7c",
+      "size": 2742
+    },
+    {
+      "name": "apps/manager-ui/src/lib/i18n.ts",
+      "sha256": "6bc95f66e70c94a208c733679bf482024dfde397fe3cdb9f6334e3f3eab0d811",
+      "size": 2961
+    },
+    {
+      "name": "apps/manager-ui/src/lib/utils.ts",
+      "sha256": "d1f1e0d62cb8d8d1e04c26e14de842d8a151f75812d81b046c65b5d1fe8e4b27",
+      "size": 169
+    },
+    {
+      "name": "apps/manager-ui/src/routeTree.gen.ts",
+      "sha256": "67a72af2853798752b5f20cc19d8538c04d480cb3225905362aef39b3bec7f0f",
+      "size": 6507
+    },
+    {
+      "name": "apps/manager-ui/src/router.tsx",
+      "sha256": "d7596156ee2a15b4835e150d92eb9a9835379fcd592b70c0d9b91eba50394f16",
+      "size": 2498
+    },
+    {
+      "name": "apps/manager-ui/src/routes/__root.tsx",
+      "sha256": "682b90487499168db2b77517721febdaff0e0e576690a7c8d62f4b8abfdbec5a",
+      "size": 2540
+    },
+    {
+      "name": "apps/manager-ui/src/routes/audit.tsx",
+      "sha256": "45575b685d785f391e547819d3f02d114086656fa7d377043e9aface0774bae7",
+      "size": 9951
+    },
+    {
+      "name": "apps/manager-ui/src/routes/documents.tsx",
+      "sha256": "47a23bdb630323169a9f58776a62418d18b3a66fd51decd69326dfda928898ad",
+      "size": 25237
+    },
+    {
+      "name": "apps/manager-ui/src/routes/downloads.tsx",
+      "sha256": "7125bc2c7a3fedf179020c5671860c763ea174cff3b743427a858d9266bb332b",
+      "size": 11658
+    },
+    {
+      "name": "apps/manager-ui/src/routes/index.tsx",
+      "sha256": "239546a9aa94e2a0fe8d43762ad758926636fa488046793208fba1a195ea7b4b",
+      "size": 10950
+    },
+    {
+      "name": "apps/manager-ui/src/routes/models.tsx",
+      "sha256": "39c195dfe1ba86680e43b319c609da5673ea8384f5b4b751863eb0b9e3c6aab8",
+      "size": 8520
+    },
+    {
+      "name": "apps/manager-ui/src/routes/query.tsx",
+      "sha256": "c7c19fb65350ebfdba8e2dd1abecf51658373f7d3bbf3b0f65e2e85da577bb0b",
+      "size": 26902
+    },
+    {
+      "name": "apps/manager-ui/src/routes/system.tsx",
+      "sha256": "56e68357e69d1e013b94d777171a33ef01f4ba4e5b87303b9c35084c20383672",
+      "size": 8699
+    },
+    {
+      "name": "apps/manager-ui/src/routes/updates.tsx",
+      "sha256": "a7a3ee3fa4c11f5d1974d604b246ffa4507c23e3efffc737a9ba2d113058c930",
+      "size": 11950
+    },
+    {
+      "name": "apps/manager-ui/src/routes/users.tsx",
+      "sha256": "1536e6f87f414dfbe5b6c09b6d46be7cac5351180128b60493737c9f67e4fc69",
+      "size": 9967
+    },
+    {
+      "name": "apps/manager-ui/src/styles.css",
+      "sha256": "b03d5aeb3c762554ed7cf29154bab455d6d74143221f199bd583998a31aac745",
+      "size": 4608
+    }
+  ],
+  "min_required_version": "0.0.0",
+  "rollback_to_previous_if_failed": true
+}

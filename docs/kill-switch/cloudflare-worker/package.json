@@ -1,0 +1,16 @@
+{
+  "name": "locallyai-killswitch-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TOTP-gated Cloudflare Worker fronting the LocallyAI kill switch.",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "tail":   "wrangler tail",
+    "dev":    "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0",
+    "@cloudflare/workers-types": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,18 @@
+# Force LF line endings on every checkout, regardless of the user's
+# core.autocrlf setting. Without this, a Windows clone with autocrlf=true
+# rewrites install.sh to CRLF and bash refuses to run it.
+
+* text=auto eol=lf
+
+*.sh        text eol=lf
+*.py        text eol=lf
+*.md        text eol=lf
+*.txt       text eol=lf
+*.plist     text eol=lf
+*.example   text eol=lf
+*.json      text eol=lf
+
+# Keep binary files binary (TLS keys, vector index payloads, model caches).
+*.pem       binary
+*.key       binary
+*.lock      binary

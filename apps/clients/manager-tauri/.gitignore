@@ -1,0 +1,6 @@
+# Tauri build artifacts
+src-tauri/target/
+src-tauri/Cargo.lock
+
+# Node
+node_modules/

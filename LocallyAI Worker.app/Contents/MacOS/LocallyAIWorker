@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Launcher for the worker UI only. Starts the API + worker-ui dev
+# server (or reuses them if already running) and opens the worker UI
+# tab in the default browser.
+#
+# Repo resolution mirrors the master launcher: app-relative first,
+# then ~/Library/Application Support/LocallyAI/repo_path override.
+set -e
+
+SELF="$0"
+APP_REPO_DIR="$(cd "$(dirname "$SELF")/../../.." && pwd)"
+CFG_FILE="$HOME/Library/Application Support/LocallyAI/repo_path"
+
+if [ -f "$APP_REPO_DIR/api.py" ]; then
+  REPO_DIR="$APP_REPO_DIR"
+elif [ -f "$CFG_FILE" ]; then
+  REPO_DIR="$(cat "$CFG_FILE" 2>/dev/null || true)"
+fi
+
+if [ -z "${REPO_DIR:-}" ] || [ ! -f "$REPO_DIR/api.py" ]; then
+  osascript -e 'display alert "LocallyAI Worker" message "Could not find the LocallyAI repository. Drop this app inside the repo, or save the repo path to ~/Library/Application Support/LocallyAI/repo_path." as critical' || true
+  exit 1
+fi
+
+exec /bin/bash "$REPO_DIR/scripts/start_locallyai.sh" worker

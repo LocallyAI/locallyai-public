@@ -1,0 +1,139 @@
+# Builds the LocallyAI Worker and Manager client apps for macOS and
+# Windows on every release tag (e.g. v1.0.0-clients) AND on every push
+# to main that touches the Tauri sources (so PRs get smoke-checked).
+#
+# Outputs:
+#   - macOS: .dmg + .app    (inside the .dmg)
+#   - Windows: .msi + .exe  (NSIS wrapper)
+#
+# All artifacts are uploaded to the workflow run's Artifacts panel
+# AND, when triggered by a tag, attached to the GitHub Release for IT
+# to download from a single URL: https://github.com/LocallyAI/locallyai/releases
+#
+# Builds are UNSIGNED. Add code-signing later by setting Apple Developer
+# ID + Windows code-signing cert as repo secrets and re-enabling the
+# signing steps near the bottom of each platform job.
+
+name: Build client apps
+
+on:
+  push:
+    tags:
+      - "v*-clients"      # e.g. v1.0.0-clients
+    branches: [main]
+    paths:
+      - "apps/clients/**"
+      - ".github/workflows/build-clients.yml"
+  workflow_dispatch: {}
+
+# Cancel an in-flight run if a newer commit lands on the same ref —
+# saves CI minutes on rapid iteration.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            app: worker-tauri
+            label: "Worker (macOS)"
+          - os: macos-latest
+            app: manager-tauri
+            label: "Manager (macOS)"
+          - os: windows-latest
+            app: worker-tauri
+            label: "Worker (Windows)"
+          - os: windows-latest
+            app: manager-tauri
+            label: "Manager (Windows)"
+
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      # Cargo's package + git registries + the per-app target dir all
+      # cache cleanly. Saves 5–8 minutes on every subsequent build.
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            apps/clients/${{ matrix.app }}/src-tauri/target/
+          key: ${{ runner.os }}-cargo-${{ matrix.app }}-${{ hashFiles(format('apps/clients/{0}/src-tauri/Cargo.toml', matrix.app)) }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.app }}-
+
+      # Linux platform deps — Tauri webview backend on Linux runners
+      # would need libwebkit2gtk; we don't target Linux yet, but include
+      # this guard so the matrix is easy to extend later.
+      - name: Install platform deps (Ubuntu only)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Install Tauri CLI
+        # --force handles GitHub runner images that ship with a pre-installed
+        # cargo-tauri (cargo refuses to overwrite without it; CI fails with
+        # "binary already exists in destination"). --locked keeps the install
+        # reproducible against Cargo.lock.
+        # ^2 keeps us on Tauri 2.x without auto-bumping major versions.
+        run: cargo install tauri-cli --version "^2" --locked --force
+
+      - name: Build (release)
+        working-directory: apps/clients/${{ matrix.app }}/src-tauri
+        run: cargo tauri build
+        # Tauri reads tauri.conf.json's bundle.targets to pick which
+        # bundle formats to produce (dmg+app on Mac; msi+nsis on Win).
+
+      - name: Collect macOS artifacts
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p artifacts
+          # The exact dir layout is target/release/bundle/{dmg,macos}/...
+          # Globs handle Tauri's filename versioning.
+          cp -R apps/clients/${{ matrix.app }}/src-tauri/target/release/bundle/dmg/*.dmg artifacts/ 2>/dev/null || true
+          cp -R apps/clients/${{ matrix.app }}/src-tauri/target/release/bundle/macos/*.app artifacts/ 2>/dev/null || true
+          ls -la artifacts/
+
+      - name: Collect Windows artifacts
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cp -R apps/clients/${{ matrix.app }}/src-tauri/target/release/bundle/msi/*.msi artifacts/ 2>/dev/null || true
+          cp -R apps/clients/${{ matrix.app }}/src-tauri/target/release/bundle/nsis/*.exe artifacts/ 2>/dev/null || true
+          ls -la artifacts/
+
+      - name: Upload to workflow run
+        uses: actions/upload-artifact@v4
+        with:
+          name: locallyai-${{ matrix.app }}-${{ runner.os }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30
+
+      # On a tag push, also attach to the GitHub Release. IT downloads
+      # from one stable URL: https://github.com/LocallyAI/locallyai/releases
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          fail_on_unmatched_files: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

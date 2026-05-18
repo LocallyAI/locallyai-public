@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Stop wrapper. Resolves the repo the same way the start launcher does.
+set -e
+
+SELF="$0"
+APP_REPO_DIR="$(cd "$(dirname "$SELF")/../../.." && pwd)"
+CFG_FILE="$HOME/Library/Application Support/LocallyAI/repo_path"
+
+if [ -f "$APP_REPO_DIR/api.py" ]; then
+  REPO_DIR="$APP_REPO_DIR"
+elif [ -f "$CFG_FILE" ]; then
+  REPO_DIR="$(cat "$CFG_FILE" 2>/dev/null || true)"
+fi
+
+if [ -z "${REPO_DIR:-}" ] || [ ! -f "$REPO_DIR/api.py" ]; then
+  osascript -e 'display alert "Stop LocallyAI" message "Could not find the LocallyAI repository." as critical' || true
+  exit 1
+fi
+
+exec /bin/bash "$REPO_DIR/scripts/stop_locallyai.sh"

@@ -1,0 +1,38 @@
+# LocallyAI — production runtime dependencies
+# Single source of truth. Install: pip install -r production/requirements.txt
+# Pinned with floors; tighten via pip-compile when locking a release.
+
+# Core API
+fastapi>=0.110.0,<0.120.0
+uvicorn[standard]>=0.27.0,<0.32.0
+pydantic>=2.6.0,<3.0.0
+python-multipart>=0.0.9,<0.1.0
+
+# Auth, env, rate limiting
+python-dotenv>=1.0.0,<2.0.0
+slowapi>=0.1.9,<0.2.0
+
+# Vector store + retrieval (BM25 is implemented locally in bm25.py — no external lib)
+qdrant-client>=1.8.0,<2.0.0
+
+# Document parsing — fitz is provided by pymupdf
+pymupdf>=1.24.0,<2.0.0
+python-docx>=1.1.0,<2.0.0
+
+# Embeddings/LLM HTTP client
+requests>=2.31.0,<3.0.0
+
+# System monitoring (sentinel)
+psutil>=5.9.0,<7.0.0
+
+# PDF audit-export reports
+reportlab>=4.0.0,<5.0.0
+
+# In-process embeddings (EMBED_BACKEND=local). Heavy dep (~1 GB with PyTorch)
+# but bypasses Ollama / LM Studio for embeddings entirely. PyTorch uses
+# Apple's MPS backend on Apple Silicon -- the same Metal acceleration MLX uses.
+sentence-transformers>=3.0.0,<5.0.0
+einops>=0.7.0,<1.0.0   # required by nomic-embed-text-v1.5
+
+# Apple Silicon MLX backend -- optional, install only when LOCALLYAI_BACKEND=mlx
+# mlx-lm>=0.10.0

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>LocallyAI Manager</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    /* Tiny self-contained launcher styling — keeps the Tauri shell
+       under 10 KB. Once the user provides a URL we redirect away from
+       this page to the firm's worker UI, so this CSS only ever shows
+       on first launch (or when the operator clicks Settings). */
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      font: 14px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: #0a0a0a; color: #e7e7e7;
+    }
+    .card {
+      width: 100%; max-width: 480px;
+      padding: 32px 36px 28px;
+      background: #161616;
+      border: 1px solid #2a2a2a;
+      border-radius: 14px;
+      box-shadow: 0 12px 36px -8px rgba(0,0,0,0.5);
+    }
+    h1 { font-size: 18px; margin: 0 0 4px; font-weight: 600; }
+    .sub { color: #999; font-size: 12.5px; margin: 0 0 24px; line-height: 1.55; }
+    label { display: block; font-size: 12px; font-weight: 500; margin: 0 0 6px; }
+    input[type=url] {
+      width: 100%;
+      height: 38px;
+      padding: 0 12px;
+      font-size: 13px;
+      background: #0d0d0d;
+      color: inherit;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      outline: none;
+    }
+    input[type=url]:focus { border-color: #4f8efb; }
+    .hint { color: #777; font-size: 11.5px; margin: 6px 0 0; }
+    button {
+      margin-top: 20px;
+      width: 100%;
+      height: 40px;
+      font-size: 13px;
+      font-weight: 500;
+      background: #f5f5f5; color: #0a0a0a;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover { opacity: .9; }
+    button:disabled { opacity: .35; cursor: not-allowed; }
+    .err { color: #f87171; font-size: 12px; margin-top: 12px; min-height: 16px; }
+    .footer {
+      margin-top: 22px;
+      padding-top: 18px;
+      border-top: 1px solid #222;
+      color: #666;
+      font-size: 11px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Connect to your firm's LocallyAI server</h1>
+    <p class="sub">
+      Enter the URL of the LocallyAI server running on your firm's
+      office machine. Ask your IT team if you don't know it.
+    </p>
+
+    <label for="url">Server URL</label>
+    <input id="url" type="url" placeholder="https://office-mac.local:8000" autofocus />
+    <p class="hint">Usually <code>https://&lt;office-host&gt;:8000</code></p>
+
+    <button id="go" disabled>Connect</button>
+    <div class="err" id="err"></div>
+
+    <div class="footer">
+      LocallyAI Manager — runs entirely on your firm's hardware. No data
+      leaves the office. The URL is saved on this device only and can be
+      changed any time from the menu.
+    </div>
+  </div>
+
+  <script type="module">
+    // Tauri 2.x exposes its bridge via globalThis.__TAURI__. We use the
+    // invoke API to talk to the Rust commands defined in lib.rs.
+    const invoke = window.__TAURI__?.core?.invoke;
+    if (!invoke) {
+      document.getElementById("err").textContent =
+        "Tauri bridge unavailable — open this app via the bundle, not directly.";
+    }
+
+    const APP_PATH = "/manager";  // worker UI mount on the office server
+
+    function normalize(raw) {
+      let s = (raw || "").trim();
+      if (!s) return "";
+      // Default to https when the user doesn't type a scheme. The firm's
+      // posture is HTTPS-only; if their office Mac is plain HTTP, they
+      // type http:// explicitly and we honour it.
+      if (!/^https?:\/\//i.test(s)) s = "https://" + s;
+      return s.replace(/\/+$/, "");  // strip trailing slash
+    }
+
+    function setError(msg) {
+      document.getElementById("err").textContent = msg || "";
+    }
+
+    async function tryLoad(url) {
+      try {
+        // /healthz returns 200 with no auth required. -k-equivalent: we
+        // accept self-signed certs because the office Mac uses one by
+        // default. Browsers (and Tauri's webview) will still warn the
+        // user once when they click Connect — they accept the cert and
+        // we move on.
+        const r = await fetch(url + "/healthz", { mode: "no-cors" });
+        // no-cors gives an opaque response; we can't read status, but a
+        // successful network round-trip means the host is reachable.
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    async function navigate(url) {
+      // Hand off to the office UI. Tauri's webview will keep the same
+      // window; the React app loads from the office server.
+      window.location.href = url + APP_PATH + "/";
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      const input = document.getElementById("url");
+      const button = document.getElementById("go");
+
+      // Pre-fill from saved config so the user doesn't re-type after
+      // first launch. If the URL is set we go straight to the UI.
+      try {
+        const saved = await invoke("load_server_url");
+        if (saved) {
+          await navigate(saved);
+          return;
+        }
+      } catch (e) { /* fall through to manual entry */ }
+
+      input.addEventListener("input", () => {
+        button.disabled = !input.value.trim();
+      });
+
+      button.addEventListener("click", async () => {
+        setError("");
+        button.disabled = true;
+        button.textContent = "Connecting…";
+        const url = normalize(input.value);
+        const ok = await tryLoad(url);
+        if (!ok) {
+          setError("Could not reach " + url + " — check the URL and that the office server is running.");
+          button.disabled = false;
+          button.textContent = "Connect";
+          return;
+        }
+        try { await invoke("save_server_url", { url }); } catch (e) { /* non-fatal */ }
+        await navigate(url);
+      });
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !button.disabled) button.click();
+      });
+    });
+  </script>
+</body>
+</html>

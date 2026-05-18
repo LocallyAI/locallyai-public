@@ -1,0 +1,63 @@
+# Python bytecode and caches
+__pycache__/
+*.pyc
+*.pyo
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# Local runtime state — never commit
+.env
+.env.bak
+.env.*.bak
+.env.bak.*
+# Runtime-state JSON files written by the API at runtime. Anchored to
+# repo root so a contributor creating `subdir/training_records.json`
+# for some other purpose is not blocked.
+/doc_acls.json
+/.doc_acls.lock
+/training_records.json
+/backup_attestations.json
+.venv/
+tls/
+users.json
+.ingest_state.json
+.audit_chain
+# Vendor/operator-side scratch directories that shouldn't pollute the repo
+.claude/
+Downloads/
+# Top-level only — leading slash anchors to production/ root, so
+# production/demo/data/ is committed (that's the demo corpus we ship).
+/storage/
+/data/
+!/data/welcome.md
+/logs/
+/qdrant_storage/
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Frontend build artefacts (apps/manager-ui, apps/worker-ui)
+apps/*/node_modules/
+apps/*/dist/
+apps/*/.env.local
+apps/*/.vite/
+apps/*/build/
+apps/*/.wrangler/
+
+# E2E temp output
+tests/**/__pycache__/
+fleet.json
+fleet.json.lock
+erasure.log
+conflicts/
+shared/
+apps/fleet-ui/node_modules/
+apps/fleet-ui/dist/
+apps/*/package-lock.json
+apps/fleet-ui/tsconfig.tsbuildinfo
+apps/manager-ui/tsconfig.tsbuildinfo
+apps/worker-ui/tsconfig.tsbuildinfo
+dist/
+.model_lock

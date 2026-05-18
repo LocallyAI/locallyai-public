@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>LocallyAI fleet monitor</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a0a0a;
+      --surface: #161616;
+      --border: #2a2a2a;
+      --text: #e7e7e7;
+      --muted: #8a8a8a;
+      --green: #4ade80;
+      --yellow: #facc15;
+      --red: #f87171;
+      --primary: #4f8efb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: var(--bg); color: var(--text);
+    }
+    header { padding: 14px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
+    header h1 { margin: 0; font-size: 15px; font-weight: 600; }
+    header .pill { font-size: 11px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+    header .ml-auto { margin-left: auto; display: flex; align-items: center; gap: 12px; font-size: 11.5px; color: var(--muted); }
+    main { padding: 20px 24px 80px; max-width: 1500px; margin: 0 auto; }
+    section { margin-bottom: 28px; }
+    section h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 10px; }
+    .grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      cursor: pointer;
+    }
+    .card:hover { border-color: var(--primary); }
+    .card-row { display: flex; align-items: center; gap: 8px; }
+    .card-row + .card-row { margin-top: 4px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .ok    { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .warn  { background: var(--yellow); }
+    .crit  { background: var(--red);   box-shadow: 0 0 8px var(--red); animation: pulse 1.4s infinite; }
+    .stale { background: var(--muted); }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .mono { font-family: ui-monospace, "SF Mono", monospace; font-size: 11px; color: var(--muted); }
+    .firm-id { font-family: ui-monospace, "SF Mono", monospace; font-size: 12px; }
+    .firm-name { font-weight: 600; font-size: 14px; }
+    .meta { color: var(--muted); font-size: 11px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
+    th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.05em; }
+    .alert-row.crit td:first-child { border-left: 3px solid var(--red); }
+    .alert-row.warn td:first-child { border-left: 3px solid var(--yellow); }
+    .alert-row.info td:first-child { border-left: 3px solid var(--primary); }
+    .ack-btn { background: var(--primary); color: #0a0a0a; border: 0; padding: 4px 10px; border-radius: 5px; font-size: 11px; cursor: pointer; }
+    .ack-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .acked { color: var(--muted); }
+    .login {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100;
+    }
+    .login form { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px 28px; width: 360px; }
+    .login h2 { margin: 0 0 6px; font-size: 16px; }
+    .login p { color: var(--muted); margin: 0 0 16px; font-size: 12px; }
+    .login input { width: 100%; height: 38px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; }
+    .login input:focus { border-color: var(--primary); outline: none; }
+    .login button { margin-top: 12px; width: 100%; height: 38px; border-radius: 6px; border: 0; background: var(--primary); color: #0a0a0a; font-weight: 600; cursor: pointer; }
+    .login .err { color: var(--red); font-size: 11.5px; margin-top: 8px; min-height: 16px; }
+    .summary-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+    .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; flex: 1; min-width: 140px; }
+    .stat .label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat .value { font-size: 22px; font-weight: 600; margin-top: 2px; font-feature-settings: "tnum"; }
+    .sla { color: var(--red); font-weight: 600; }
+    /* Top-level vendor-tool navigation. The dashboard is the vendor's
+       cross-firm surface; firm-side UIs live in the deployment's
+       Manager UI. Tabs grow horizontally as we add vendor tools. */
+    .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin: 0 -24px 20px; padding: 0 24px; }
+    .tab { background: transparent; border: 0; color: var(--muted); padding: 10px 18px; font-size: 13px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--text); border-bottom-color: var(--primary); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    /* Sizing tool */
+    .sizing-grid { display: grid; gap: 16px; grid-template-columns: 360px 1fr; }
+    @media (max-width: 900px) { .sizing-grid { grid-template-columns: 1fr; } }
+    .sizing-form { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+    .sizing-form .field { margin-bottom: 12px; }
+    .sizing-form label { display: block; font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+    .sizing-form input, .sizing-form select { width: 100%; padding: 6px 8px; border-radius: 5px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; }
+    .sizing-form .hint { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+    .sizing-form button { width: 100%; padding: 8px; background: var(--primary); color: #0a0a0a; border: 0; border-radius: 5px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+    .headline-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .headline { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+    .headline .label { font-size: 10.5px; color: var(--muted); text-transform: uppercase; }
+    .headline .v { font-size: 14px; font-weight: 600; margin-top: 4px; }
+    .headline .s { font-size: 11px; color: var(--muted); }
+    .warn-box { background: rgba(250, 204, 21, 0.08); border: 1px solid rgba(250, 204, 21, 0.3); border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; font-size: 12px; }
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; }
+    .panel h3 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+    .check-list { list-style: none; padding: 0; margin: 0; }
+    .check-list li { padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+    .check-list li:last-child { border: 0; }
+    .check-list input { margin-right: 6px; }
+    .check-list .cat { font-size: 10px; text-transform: uppercase; color: var(--muted); margin-top: 10px; margin-bottom: 4px; font-weight: 600; }
+    .check-list code { background: rgba(255,255,255,0.05); padding: 1px 4px; border-radius: 3px; font-size: 10.5px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="login" id="login">
+    <form onsubmit="event.preventDefault(); doLogin();">
+      <h2>LocallyAI fleet monitor</h2>
+      <p>Enter the 6-digit code from your authenticator app to sign in.</p>
+      <input id="totp" type="text" inputmode="numeric" maxlength="16" autocomplete="one-time-code" placeholder="123456" autofocus />
+      <button type="submit">Sign in</button>
+      <div class="err" id="loginErr"></div>
+    </form>
+  </div>
+
+  <header style="display: none;" id="header">
+    <h1>LocallyAI fleet monitor</h1>
+    <span class="pill" id="firmCount">0 firms</span>
+    <span class="pill" id="alertCount">0 open alerts</span>
+    <div class="ml-auto">
+      <span id="lastRefresh">Loading…</span>
+      <button onclick="refresh()" style="background: transparent; border: 1px solid var(--border); color: var(--text); padding: 4px 10px; border-radius: 5px; cursor: pointer;">Refresh</button>
+    </div>
+  </header>
+
+  <main style="display: none;" id="main">
+    <nav class="tabs">
+      <button class="tab active" data-tab="fleet" onclick="switchTab('fleet')">Fleet</button>
+      <button class="tab" data-tab="sizing" onclick="switchTab('sizing')">Sizing</button>
+    </nav>
+
+    <!-- ── Fleet tab ─────────────────────────────────────────────────────── -->
+    <div class="tab-panel active" id="tab-fleet">
+      <div class="summary-row">
+        <div class="stat"><div class="label">Healthy firms</div><div class="value" id="statHealthy">—</div></div>
+        <div class="stat"><div class="label">Warning</div><div class="value" id="statWarn">—</div></div>
+        <div class="stat"><div class="label">Critical</div><div class="value" id="statCrit">—</div></div>
+        <div class="stat"><div class="label">Stale (>1h silent)</div><div class="value" id="statStale">—</div></div>
+        <div class="stat"><div class="label">SLA at risk</div><div class="value sla" id="statSLA">—</div></div>
+      </div>
+
+      <section id="pendingSection" style="display: none;">
+        <h2>Pending firms (awaiting vendor ack)</h2>
+        <table id="pendingTable">
+          <thead><tr><th>Firm ID</th><th>Firm name</th><th>Registered</th><th>Via</th><th></th></tr></thead>
+          <tbody id="pendingBody"></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Open alerts</h2>
+        <table id="alertsTable">
+          <thead><tr><th>When</th><th>Firm</th><th>Code</th><th>Sev</th><th>Message</th><th>Age</th><th></th></tr></thead>
+          <tbody id="alertsBody"><tr><td colspan="7" class="meta">Loading…</td></tr></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Firms</h2>
+        <div class="grid" id="firmsGrid"></div>
+      </section>
+    </div>
+
+    <!-- ── Sizing tab — vendor-only, pure-JS calculator ─────────────────── -->
+    <div class="tab-panel" id="tab-sizing">
+      <section>
+        <h2>Per-firm hardware + model recommendation</h2>
+        <p class="meta" style="margin-bottom: 16px;">
+          Sales / onboarding tool. Vendor-only — lives here (not in firm Manager UIs) because firms don't size their own hardware.
+          Catalog: Q8 (8-bit quantised) and FP16/BF16 (half-precision) only — <strong>never Q4</strong> per vendor policy.
+        </p>
+        <div class="sizing-grid">
+          <div class="sizing-form">
+            <div class="field">
+              <label>Total users (lawyers)</label>
+              <input type="number" id="szUsers" value="15" min="1" max="500" />
+            </div>
+            <div class="field">
+              <label>Concurrent users at peak</label>
+              <input type="number" id="szConcurrent" value="4" min="1" max="100" />
+              <div class="hint">Typical: 20-30% of total at peak hours</div>
+            </div>
+            <div class="field">
+              <label>Document corpus (GB)</label>
+              <input type="number" id="szCorpus" value="20" min="0" max="5000" step="1" />
+              <div class="hint">~1 GB ≈ 5,000 pages of text-only PDFs</div>
+            </div>
+            <div class="field">
+              <label>Region</label>
+              <select id="szRegion">
+                <option value="UK">UK (GDPR / DPA 2018)</option>
+                <option value="KSA">KSA (PDPL — Arabic UI + multilingual model)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Quality preference</label>
+              <select id="szQuality">
+                <option value="balanced">Balanced (medium-tier Q8)</option>
+                <option value="fidelity">Fidelity (largest BF16 within RAM budget)</option>
+                <option value="throughput">Throughput (smallest model for tps)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Latency target p95 (ms)</label>
+              <input type="number" id="szLatency" value="5000" min="500" max="30000" step="500" />
+            </div>
+            <div class="field">
+              <label><input type="checkbox" id="szHa" style="width: auto; margin-right: 6px;" />HA required (second Mac for failover)</label>
+            </div>
+            <button onclick="computeSizing()">Compute recommendation</button>
+          </div>
+          <div id="szResult"><div class="meta" style="padding: 40px; text-align: center;">Fill the profile on the left and click <strong>Compute</strong>.</div></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    // SESSION_KEY holds an HMAC session token issued by the worker after
+    // a successful TOTP/recovery login (X-Admin-Session header). The
+    // dashboard sends it on subsequent polls so the credential is only
+    // presented once per session — this is what lets polling work
+    // without burning rate-limit budget or tripping TOTP replay defence.
+    const SESSION_KEY = "locallyai_admin_session";
+    let SESSION = sessionStorage.getItem(SESSION_KEY) || null;
+    let TOTP = null;  // only set briefly during login
+
+    async function api(path, opts = {}) {
+      const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
+      if (SESSION) headers["X-Admin-Session"] = SESSION;
+      else if (TOTP) headers["X-Admin-TOTP"] = TOTP;
+      const r = await fetch(path, { ...opts, headers });
+      if (r.status === 401) {
+        sessionStorage.removeItem(SESSION_KEY);
+        SESSION = null;
+        TOTP = null;
+        showLogin();
+        throw new Error("unauthorized");
+      }
+      // Capture a freshly minted session token if the worker issued one.
+      const newSession = r.headers.get("X-Admin-Session");
+      if (newSession) {
+        SESSION = newSession;
+        sessionStorage.setItem(SESSION_KEY, newSession);
+        TOTP = null;  // credential no longer needed; session takes over
+      }
+      return r.json();
+    }
+
+    async function doLogin() {
+      const code = document.getElementById("totp").value.trim();
+      if (!code) return;
+      TOTP = code;
+      SESSION = null;  // force fresh session mint
+      sessionStorage.removeItem(SESSION_KEY);
+      try {
+        await api("/api/firms");  // captures session token from response
+        document.getElementById("login").style.display = "none";
+        document.getElementById("header").style.display = "flex";
+        document.getElementById("main").style.display = "block";
+        refresh();
+        setInterval(refresh, 30_000);
+      } catch (e) {
+        document.getElementById("loginErr").textContent = "Invalid code. Try again.";
+        TOTP = null;
+      }
+    }
+
+    function showLogin() {
+      document.getElementById("login").style.display = "flex";
+      document.getElementById("header").style.display = "none";
+      document.getElementById("main").style.display = "none";
+    }
+
+    function ageMin(iso) {
+      return Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+    }
+    function ageDisplay(min) {
+      if (min < 60) return `${min}m`;
+      if (min < 1440) return `${Math.floor(min / 60)}h ${min % 60}m`;
+      return `${Math.floor(min / 1440)}d ${Math.floor((min % 1440) / 60)}h`;
+    }
+
+    function classifyFirm(firm) {
+      const snap = firm.last_snapshot;
+      const lastSeenMin = ageMin(firm.last_seen);
+      if (lastSeenMin > 60) return "stale";
+      if (!snap.healthz_ok || !snap.sentinel_ok) return "crit";
+      if (snap.free_disk_gb >= 0 && snap.free_disk_gb < 5) return "warn";
+      if (snap.free_mem_gb >= 0 && snap.free_mem_gb < 1)  return "warn";
+      if (snap.error_count_24h > 50) return "warn";
+      return "ok";
+    }
+
+    async function refresh() {
+      try {
+        const [firmsResp, alertsResp, pendingResp] = await Promise.all([
+          api("/api/firms"),
+          api("/api/alerts?open=1"),
+          api("/api/firms/pending").catch(() => ({ firms: [] })),
+        ]);
+        renderFirms(firmsResp.firms || []);
+        renderAlerts(alertsResp.alerts || []);
+        renderPending(pendingResp.firms || []);
+        document.getElementById("lastRefresh").textContent = "Updated " + new Date().toLocaleTimeString();
+      } catch (e) {
+        if (e.message !== "unauthorized") console.error(e);
+      }
+    }
+
+    function renderPending(firms) {
+      const sec = document.getElementById("pendingSection");
+      const tbody = document.getElementById("pendingBody");
+      if (!firms.length) {
+        sec.style.display = "none";
+        tbody.innerHTML = "";
+        return;
+      }
+      sec.style.display = "block";
+      tbody.innerHTML = "";
+      for (const f of firms) {
+        const tr = document.createElement("tr");
+        const reg = f.registered_at ? new Date(f.registered_at).toLocaleString() : "—";
+        tr.innerHTML = `
+          <td><code>${f.firm_id}</code></td>
+          <td>${escapeHtml(f.firm_name || "")}</td>
+          <td class="meta">${reg}</td>
+          <td class="meta">${escapeHtml(f.via || "")}</td>
+          <td><button data-firm="${f.firm_id}">Acknowledge</button></td>
+        `;
+        tr.querySelector("button").addEventListener("click", async (ev) => {
+          ev.currentTarget.disabled = true;
+          try {
+            await api("/api/firms/ack", { method: "POST", body: JSON.stringify({ firm_id: f.firm_id }) });
+            refresh();
+          } catch {
+            ev.currentTarget.disabled = false;
+          }
+        });
+        tbody.appendChild(tr);
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function renderFirms(firms) {
+      const grid = document.getElementById("firmsGrid");
+      grid.innerHTML = "";
+      let healthy = 0, warn = 0, crit = 0, stale = 0;
+
+      // ── HA pairing — group nodes by firm_id ────────────────────────
+      // Every firm ships with two Mac Studios; both heartbeat to this
+      // worker carrying the same firm_id (same firm) but different
+      // node_id (different Mac). Group them under one card so the
+      // operator sees the pair status at a glance.
+      const pairs = new Map();   // firm_id → { firm_name, nodes: [] }
+      for (const f of firms) {
+        const key = f.firm_id;
+        if (!pairs.has(key)) pairs.set(key, { firm_name: f.firm_name, firm_id: key, nodes: [] });
+        pairs.get(key).nodes.push(f);
+      }
+
+      for (const pair of pairs.values()) {
+        // Worst-of state across nodes drives the card colour.
+        const nodeCls = pair.nodes.map(classifyFirm);
+        const worst = nodeCls.includes("crit") ? "crit"
+                     : nodeCls.includes("stale") ? "stale"
+                     : nodeCls.includes("warn") ? "warn" : "ok";
+        if (worst === "ok") healthy++;
+        else if (worst === "warn") warn++;
+        else if (worst === "crit") crit++;
+        else stale++;
+
+        // Per-node mini-row inside the card
+        const sorted = pair.nodes.slice().sort((a, b) => a.last_snapshot.node_id.localeCompare(b.last_snapshot.node_id));
+        const nodeRows = sorted.map((f, idx) => {
+          const cls = classifyFirm(f);
+          const snap = f.last_snapshot;
+          const lastSeen = ageDisplay(ageMin(f.last_seen));
+          const role = idx === 0 ? "primary" : "standby";
+          return `
+            <div class="card-row" style="border-top: 1px solid var(--border); padding-top: 6px; margin-top: 6px;">
+              <span class="dot ${cls}"></span>
+              <span style="font-size: 11px; font-weight: 600;">${role.toUpperCase()}</span>
+              <span class="meta" style="font-size: 11px;">${escapeHtml(snap.node_id)}</span>
+            </div>
+            <div class="card-row meta" style="font-size: 11px;">
+              v${snap.version} · ${snap.region || "?"} · ${snap.backend || "?"}
+              · healthz=${snap.healthz_ok ? "✓" : "✗"}
+              · sentinel=${snap.sentinel_ok ? "✓" : "✗"}
+            </div>
+            <div class="card-row meta" style="font-size: 11px;">
+              disk=${snap.free_disk_gb}GB · mem=${snap.free_mem_gb}GB · errors24h=${snap.error_count_24h}
+              · seen ${lastSeen} ago
+            </div>
+          `;
+        }).join("");
+
+        // HA-status banner
+        let haBanner = "";
+        if (pair.nodes.length === 1) {
+          haBanner = `<div class="card-row meta" style="color: var(--yellow); font-size: 11px;">
+            ⚠ Only ONE node heartbeating — this firm ships with two; the second is silent or never registered.
+          </div>`;
+        } else if (pair.nodes.length > 2) {
+          haBanner = `<div class="card-row meta" style="font-size: 11px;">
+            ${pair.nodes.length} nodes (expected 2 — extra nodes may be from a stale install)
+          </div>`;
+        }
+
+        const card = document.createElement("div");
+        card.className = "card";
+        const nameLine = pair.firm_name
+          ? `<div class="firm-name">${escapeHtml(pair.firm_name)}</div>
+             <div class="card-row meta"><code>${pair.firm_id}</code></div>`
+          : `<span class="firm-id">${pair.firm_id}</span>`;
+        card.innerHTML = `
+          <div class="card-row">
+            <span class="dot ${worst}"></span>
+            ${nameLine}
+          </div>
+          ${haBanner}
+          ${nodeRows}
+        `;
+        grid.appendChild(card);
+      }
+      document.getElementById("statHealthy").textContent = healthy;
+      document.getElementById("statWarn").textContent = warn;
+      document.getElementById("statCrit").textContent = crit;
+      document.getElementById("statStale").textContent = stale;
+      document.getElementById("firmCount").textContent = `${pairs.size} firm${pairs.size === 1 ? "" : "s"} (${firms.length} nodes)`;
+    }
+
+    function renderAlerts(alerts) {
+      const tbody = document.getElementById("alertsBody");
+      tbody.innerHTML = "";
+      let slaAtRisk = 0;
+      const now = Date.now();
+      for (const a of alerts) {
+        const ageM = Math.floor((now - new Date(a.timestamp).getTime()) / 60_000);
+        const slaWarn = ageM >= 210; // 3.5h
+        if (slaWarn) slaAtRisk++;
+        const tr = document.createElement("tr");
+        tr.className = `alert-row ${a.severity}`;
+        const ageCls = slaWarn ? "sla" : "";
+        tr.innerHTML = `
+          <td class="mono">${new Date(a.timestamp).toLocaleString()}</td>
+          <td class="firm-id">${a.firm_id}</td>
+          <td class="mono">${a.code}</td>
+          <td>${a.severity}</td>
+          <td>${a.message || ""}${a.auto_healed ? " <span class=\"meta\">(auto-healed)</span>" : ""}</td>
+          <td class="${ageCls}">${ageDisplay(ageM)}</td>
+          <td><button class="ack-btn" onclick="ack('${a.alert_id}', this)">Ack</button></td>
+        `;
+        tbody.appendChild(tr);
+      }
+      if (alerts.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="meta">No open alerts. 🎉</td></tr>`;
+      }
+      document.getElementById("statSLA").textContent = slaAtRisk;
+      document.getElementById("alertCount").textContent = `${alerts.length} open alert${alerts.length === 1 ? "" : "s"}`;
+    }
+
+    async function ack(id, btn) {
+      btn.disabled = true; btn.textContent = "…";
+      try {
+        await api("/api/ack", { method: "POST", body: JSON.stringify({ alert_id: id }) });
+        refresh();
+      } catch (e) {
+        btn.disabled = false; btn.textContent = "Ack";
+      }
+    }
+
+    // Bootstrap: if we already have a (recovery-code) session, jump in.
+    if (TOTP && TOTP.length > 6) {
+      doLogin();
+    }
+
+    // ── Tab switching ───────────────────────────────────────────────────
+    function switchTab(name) {
+      document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+      document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === "tab-" + name));
+    }
+
+    // ── Sizing engine (vendor-only, pure-JS) ────────────────────────────
+    // Mirror of sizing.py — single source of truth lives in this file
+    // for the vendor dashboard. The Python module is retained for the
+    // CLI shortcut path but the dashboard's catalog wins on disagreement.
+
+    const HARDWARE_CATALOG = [
+      { sku: "Mac Studio M4 Max 36GB",    ram_gb:  36, price_gbp_approx: 2099, chip: "M4 Max" },
+      { sku: "Mac Studio M4 Max 48GB",    ram_gb:  48, price_gbp_approx: 2299, chip: "M4 Max" },
+      { sku: "Mac Studio M4 Max 64GB",    ram_gb:  64, price_gbp_approx: 2599, chip: "M4 Max" },
+      { sku: "Mac Studio M4 Max 96GB",    ram_gb:  96, price_gbp_approx: 2999, chip: "M4 Max" },
+      { sku: "Mac Studio M4 Max 128GB",   ram_gb: 128, price_gbp_approx: 3499, chip: "M4 Max" },
+      { sku: "Mac Studio M3 Ultra 96GB",  ram_gb:  96, price_gbp_approx: 4199, chip: "M3 Ultra" },
+      { sku: "Mac Studio M3 Ultra 128GB", ram_gb: 128, price_gbp_approx: 4499, chip: "M3 Ultra" },
+      { sku: "Mac Studio M3 Ultra 192GB", ram_gb: 192, price_gbp_approx: 5499, chip: "M3 Ultra" },
+      { sku: "Mac Studio M3 Ultra 256GB", ram_gb: 256, price_gbp_approx: 6999, chip: "M3 Ultra" },
+      { sku: "Mac Studio M3 Ultra 512GB", ram_gb: 512, price_gbp_approx: 9499, chip: "M3 Ultra" },
+    ];
+
+    const MODEL_CATALOG = [
+      { id: "mlx-community/Mistral-7B-Instruct-v0.3-8bit", family: "Mistral", params_b: 7,  quant: "Q8",   size_gb: 7,   multilingual_quality: "fair", tier: "small",      tps_m3ultra: 90 },
+      { id: "mlx-community/Qwen2.5-7B-Instruct-8bit",      family: "Qwen2.5", params_b: 7,  quant: "Q8",   size_gb: 8,   multilingual_quality: "best", tier: "small",      tps_m3ultra: 85 },
+      { id: "mlx-community/Llama-3.1-8B-Instruct-8bit",    family: "Llama",   params_b: 8,  quant: "Q8",   size_gb: 8,   multilingual_quality: "good", tier: "small",      tps_m3ultra: 80 },
+      { id: "mlx-community/Qwen2.5-14B-Instruct-8bit",     family: "Qwen2.5", params_b: 14, quant: "Q8",   size_gb: 15,  multilingual_quality: "best", tier: "medium",     tps_m3ultra: 55 },
+      { id: "mlx-community/Mixtral-8x7B-Instruct-v0.1-8bit", family: "Mixtral", params_b: 47, params_b_active: 13, quant: "Q8", size_gb: 47, multilingual_quality: "good", tier: "medium", tps_m3ultra: 50, note: "MoE — 47B total, 13B active" },
+      { id: "mlx-community/Qwen2.5-32B-Instruct-8bit",     family: "Qwen2.5", params_b: 32, quant: "Q8",   size_gb: 32,  multilingual_quality: "best", tier: "medium",     tps_m3ultra: 35 },
+      { id: "mlx-community/Llama-3.3-70B-Instruct-8bit",   family: "Llama",   params_b: 70, quant: "Q8",   size_gb: 70,  multilingual_quality: "good", tier: "large",      tps_m3ultra: 18 },
+      { id: "mlx-community/Qwen2.5-72B-Instruct-8bit",     family: "Qwen2.5", params_b: 72, quant: "Q8",   size_gb: 72,  multilingual_quality: "best", tier: "large",      tps_m3ultra: 17 },
+      { id: "mlx-community/Qwen2.5-72B-Instruct-bf16",     family: "Qwen2.5", params_b: 72, quant: "BF16", size_gb: 145, multilingual_quality: "best", tier: "very_large", tps_m3ultra: 9 },
+      { id: "mlx-community/Llama-3.3-70B-Instruct-bf16",   family: "Llama",   params_b: 70, quant: "BF16", size_gb: 140, multilingual_quality: "good", tier: "very_large", tps_m3ultra: 9 },
+      { id: "mlx-community/Mixtral-8x22B-Instruct-v0.1-8bit", family: "Mixtral", params_b: 141, params_b_active: 39, quant: "Q8", size_gb: 141, multilingual_quality: "good", tier: "very_large", tps_m3ultra: 11, note: "MoE — 141B total, 39B active" },
+    ];
+
+    const EMBEDDERS = {
+      UK:  { id: "nomic-embed-text:latest",         rationale: "English-strong, ~140M params; runs on any RAM tier.", ram_gb: 1 },
+      KSA: { id: "intfloat/multilingual-e5-base",   rationale: "Multilingual (Arabic + English at parity), 278M params; required for KSA.", ram_gb: 2 },
+    };
+
+    function ramRequired(model, concurrent) {
+      const modelGb = model.size_gb;
+      const kvPerUser = Math.max(1, modelGb * 0.05);
+      const overhead = 8 + 2 + 4 + 4;
+      const total = modelGb + (kvPerUser * concurrent) + overhead;
+      return Math.ceil(total / 4) * 4;
+    }
+
+    function selectHardware(ramNeeded) {
+      const candidates = HARDWARE_CATALOG.filter((h) => h.ram_gb >= ramNeeded);
+      if (!candidates.length) {
+        const biggest = HARDWARE_CATALOG.reduce((a, b) => (a.ram_gb > b.ram_gb ? a : b));
+        return { ...biggest, exceeds_catalog: true,
+          warning: `Profile needs ~${ramNeeded} GB; catalog tops out at ${biggest.ram_gb} GB. Consider HA or a smaller model.` };
+      }
+      candidates.sort((a, b) =>
+        a.ram_gb - b.ram_gb ||
+        (a.chip.includes("Ultra") ? 0 : 1) - (b.chip.includes("Ultra") ? 0 : 1) ||
+        a.price_gbp_approx - b.price_gbp_approx
+      );
+      return candidates[0];
+    }
+
+    function scoreModel(m, p) {
+      let s = 0;
+      if (p.users_concurrent_peak >= 10) s += m.params_b * 0.5;
+      else if (p.users_concurrent_peak >= 5) s += m.params_b * 0.2;
+      if (p.quality_preference === "balanced") {
+        if (p.users_total < 15 && m.params_b > 14) s += (m.params_b - 14) * 0.8;
+        if (p.users_total < 40 && m.params_b > 32) s += (m.params_b - 32) * 0.4;
+        if (m.tier === "medium") s -= 8;
+        else if (m.tier === "very_large") s += 25;
+        else if (m.tier === "small") s += p.users_total >= 15 ? 3 : -2;
+      }
+      if (p.quality_preference === "fidelity") {
+        if (m.quant === "BF16") s -= 30;
+        s -= m.params_b * 0.5;
+      }
+      if (p.quality_preference === "throughput") {
+        s += m.params_b * 1.0;
+        if (m.tier === "small") s -= 5;
+      }
+      if (p.region === "KSA" && m.multilingual_quality === "good") s += 5;
+      if (m.params_b < 8 && p.quality_preference !== "throughput") s += 5;
+      if (m.params_b_active && p.users_total < 30) s += 8;
+      return s;
+    }
+
+    function selectModel(p) {
+      let eligible = MODEL_CATALOG.filter((m) => m.quant === "Q8" || m.quant === "BF16");
+      if (p.region === "KSA") eligible = eligible.filter((m) => m.multilingual_quality !== "fair");
+      const ranked = eligible.slice().sort((a, b) => scoreModel(a, p) - scoreModel(b, p));
+      return { primary: ranked[0], alternatives: ranked.slice(1, 3) };
+    }
+
+    function expectedPerformance(model, hardware, p) {
+      const base = model.tps_m3ultra;
+      const eff = hardware.chip.includes("M4 Max") ? Math.floor(base * 0.6) : base;
+      const concurrent = Math.max(1, Math.floor(eff / Math.max(1, p.users_concurrent_peak * 0.6)));
+      const cold = Math.max(5, Math.floor(model.size_gb * 0.4));
+      return {
+        tps_single: eff,
+        tps_peak_per_user: concurrent,
+        cold_load_s: cold,
+        concurrent_supported: p.users_concurrent_peak,
+        latency_p50_ms: Math.floor((1000 / Math.max(1, eff)) * 50),
+        latency_p95_ms: Math.floor(p.latency_target_ms * 0.8),
+      };
+    }
+
+    function buildChecklist(p, rec) {
+      const items = [];
+      const add = (cat, req, label, ref) => items.push({ category: cat, required: req, label, sop_ref: ref || null });
+      add("pre-install", true, `Confirm hardware ordered: ${rec.hardware.sku}`, "vendor-sop/vendor-sales.md");
+      add("pre-install", true, "Order form + DPA signed and filed in vendor-records", "vendor-sop/vendor-onboarding.md");
+      add("pre-install", true, "Confirm office network: static IP for the Mac, outbound HTTPS to github/huggingface/workers.dev", "sop/data-isolation.md");
+      if (p.ha_required) add("pre-install", true, "Order SECOND identical Mac Studio for HA failover", "sop/setup-mac-ha.md");
+      if (p.region === "KSA") {
+        add("pre-install", true, "Confirm KSA data residency in DPA (PDPL Art. 29) + Arabic UI requirement", "sop/setup-saudi.md");
+        add("pre-install", true, "Translate firm-specific demo docs into Arabic for first-run", "sop/setup-saudi.md");
+      }
+      add("install", true, "Enable FileVault on the office Mac BEFORE running install.sh", "sop/setup-mac-single.md");
+      add("install", true, `Run install.sh with LOCALLYAI_DATA_REGION=${p.region}`, "sop/setup-mac-single.md");
+      add("install", true, `Set LOCALLYAI_MODEL to ${rec.model.id} in .env`, "sop/maintenance.md");
+      add("install", true, `Set EMBED_MODEL to ${rec.embedder.id} in .env`, "sop/maintenance.md");
+      if (p.ha_required) add("install", true, "Pair second Mac as HA peer (Syncthing + shared SHARED_DIR)", "sop/setup-mac-ha.md");
+      add("install", true, "Pre-pull the LLM (warms HF cache before going live)", "runbooks/add-new-firm.md");
+      add("install", true, "Capture the printed admin key into vendor-records (encrypted with firm PGP)", "runbooks/add-new-firm.md");
+      if (p.corpus_gb_estimate >= 5) add("ingest", true, `Plan bulk ingest of ~${p.corpus_gb_estimate.toFixed(0)} GB corpus (off-hours; ~${Math.floor(p.corpus_gb_estimate * 8)} min)`, "sop/bulk-ingest.md");
+      if (p.corpus_gb_estimate >= 50) add("ingest", false, "Tune CHUNK_SIZE + RELEVANCE_FLOOR for large corpus", "sop/incidents-service.md");
+      add("distribution", true, "Build per-firm staff apps: bash scripts/build_staff_apps.sh", "scripts/build_staff_apps.sh");
+      add("distribution", true, "Distribute LocallyAI Trust Cert.zip to all staff laptops FIRST", "scripts/build_staff_apps.sh");
+      add("distribution", true, `Distribute LocallyAI Manager.app.zip to ~${Math.max(1, Math.floor(p.users_total / 10))} DPO/admin users`, "apps/manager-desktop/README.md");
+      add("distribution", true, `Distribute LocallyAI Workspace.app.zip OR Windows zip to ${p.users_total} lawyers`, "apps/worker-desktop/README.md");
+      add("first-week", true, "Generate baseline compliance snapshot (day-zero filing)", "runbooks/dpo-monthly-snapshot.md");
+      add("first-week", true, "Acknowledge the firm on the vendor monitor dashboard", "runbooks/add-new-firm.md");
+      add("first-week", true, "Confirm first heartbeat reached Cloudflare", "runbooks/add-new-firm.md");
+      add("first-week", false, "Record first round of user training events", "sop/dpo-compliance-portal.md");
+      if (p.region === "KSA") add("first-week", true, "Run setup-saudi.md verification (Arabic UI, RTL, Hijri dates)", "sop/setup-saudi.md");
+      add("ongoing", true, "Schedule monthly compliance snapshot in vendor CS calendar", "vendor-sop/vendor-customer-success.md");
+      add("ongoing", true, "Schedule quarterly backup-restore test + record attestation", "sop/dpo-compliance-portal.md");
+      add("ongoing", false, "Schedule annual salt rotation in vendor maintenance window", "sop/maintenance.md");
+      return items;
+    }
+
+    function explainModel(m, p) {
+      const parts = [];
+      if (p.region === "KSA") parts.push(m.multilingual_quality === "best" ? "multilingual_quality=best (strong Arabic)." : "multilingual_quality=good (acceptable Arabic).");
+      parts.push(m.quant === "BF16" ? "BF16 (half-precision, no quantisation loss)." : "Q8 (~99% of BF16 quality at half the RAM).");
+      parts.push(`${m.params_b}B parameters, ~${m.size_gb} GB on disk.`);
+      if (p.quality_preference === "throughput") parts.push("Smaller param count for throughput at peak.");
+      return parts.join(" ");
+    }
+
+    function recommend(p) {
+      const { primary, alternatives } = selectModel(p);
+      const ramNeeded = ramRequired(primary, p.users_concurrent_peak);
+      const hardware = selectHardware(ramNeeded);
+      const embedder = EMBEDDERS[p.region];
+      const warnings = [];
+      if (p.users_concurrent_peak > p.users_total) warnings.push("Concurrent peak exceeds total users — sanity-check input.");
+      if (p.users_concurrent_peak >= 10 && !p.ha_required) warnings.push(`Concurrency ≥ ${p.users_concurrent_peak} typically warrants HA.`);
+      if (hardware.exceeds_catalog) warnings.push(hardware.warning);
+      if (p.region === "KSA" && !primary.family.includes("Qwen")) warnings.push("Non-Qwen model for KSA — Arabic quality may be lower.");
+      if (primary.size_gb >= 100 && !p.ha_required) warnings.push("Model ≥ 100 GB — single-node has no failover margin; consider HA.");
+      const ha_recommended = p.ha_required || primary.size_gb >= 100 || p.users_concurrent_peak >= 10;
+      const rec = {
+        hardware: {
+          ...hardware,
+          ram_needed_estimate_gb: ramNeeded,
+          storage_gb_recommended: Math.max(1000, Math.floor(p.corpus_gb_estimate * 10) + 500),
+          rationale: `Model ~${primary.size_gb} GB + ~${Math.floor(primary.size_gb * 0.05 * p.users_concurrent_peak)} GB KV cache at peak + ~18 GB system/embedder/Qdrant/headroom = ~${ramNeeded} GB needed.`,
+        },
+        model: { ...primary, rationale: explainModel(primary, p) },
+        alternatives: alternatives.map((m) => ({ ...m, rationale: explainModel(m, p) })),
+        embedder,
+        expected_performance: expectedPerformance(primary, hardware, p),
+        ha_recommended,
+        warnings,
+      };
+      rec.checklist = buildChecklist(p, rec);
+      return rec;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function computeSizing() {
+      const profile = {
+        users_total: Number(document.getElementById("szUsers").value) || 1,
+        users_concurrent_peak: Number(document.getElementById("szConcurrent").value) || 1,
+        corpus_gb_estimate: Number(document.getElementById("szCorpus").value) || 0,
+        region: document.getElementById("szRegion").value,
+        use_case: "mixed",
+        ha_required: document.getElementById("szHa").checked,
+        latency_target_ms: Number(document.getElementById("szLatency").value) || 5000,
+        quality_preference: document.getElementById("szQuality").value,
+      };
+      const r = recommend(profile);
+      renderSizing(r, profile);
+    }
+
+    function renderSizing(r, p) {
+      const e = escapeHtml;
+      const cats = {};
+      const order = [];
+      for (const it of r.checklist) {
+        if (!(it.category in cats)) { cats[it.category] = []; order.push(it.category); }
+        cats[it.category].push(it);
+      }
+      const checklistHtml = order.map((cat) => `
+        <div class="cat">${e(cat)}</div>
+        ${cats[cat].map((it, i) => `
+          <li>
+            <label>
+              <input type="checkbox" />
+              ${e(it.label)}
+              ${!it.required ? '<span class="meta">(optional)</span>' : ''}
+              ${it.sop_ref ? `&nbsp;→ <code>${e(it.sop_ref)}</code>` : ''}
+            </label>
+          </li>`).join("")}
+      `).join("");
+      const altHtml = r.alternatives.map((m) => `
+        <tr>
+          <td><code>${e(m.id)}</code></td>
+          <td>${e(m.params_b)}B${m.params_b_active ? ` (${m.params_b_active}B active)` : ''}</td>
+          <td>${e(m.quant)}</td>
+          <td>${e(m.size_gb)} GB</td>
+          <td>${e(m.multilingual_quality)}</td>
+          <td style="text-align:right">${e(m.tps_m3ultra)}</td>
+          <td class="meta">${e(m.rationale)}</td>
+        </tr>`).join("");
+      document.getElementById("szResult").innerHTML = `
+        <div class="headline-row">
+          <div class="headline">
+            <div class="label">Hardware</div>
+            <div class="v">${e(r.hardware.sku)}</div>
+            <div class="s">${r.hardware.ram_gb} GB · ~£${r.hardware.price_gbp_approx.toLocaleString()}</div>
+          </div>
+          <div class="headline">
+            <div class="label">Model (Q8 / FP only)</div>
+            <div class="v">${e(r.model.family)} ${r.model.params_b}B ${e(r.model.quant)}</div>
+            <div class="s">${r.model.size_gb} GB · multilingual: ${e(r.model.multilingual_quality)}</div>
+          </div>
+          <div class="headline">
+            <div class="label">Embedder</div>
+            <div class="v" style="font-size: 12px">${e(r.embedder.id)}</div>
+            <div class="s">${r.embedder.ram_gb} GB · ${e(p.region)}</div>
+          </div>
+        </div>
+        ${r.warnings.length ? `<div class="warn-box"><strong>Warnings</strong><ul style="margin:6px 0 0 18px">${r.warnings.map((w) => `<li>${e(w)}</li>`).join("")}</ul></div>` : ''}
+        <div class="panel">
+          <h3>Hardware breakdown</h3>
+          <div><strong>SKU:</strong> ${e(r.hardware.sku)} (${e(r.hardware.chip)})</div>
+          <div><strong>RAM:</strong> ${r.hardware.ram_gb} GB (need ~${r.hardware.ram_needed_estimate_gb} GB)</div>
+          <div><strong>Storage:</strong> ${r.hardware.storage_gb_recommended.toLocaleString()} GB SSD</div>
+          <div><strong>Indicative price:</strong> ~£${r.hardware.price_gbp_approx.toLocaleString()}</div>
+          <div><strong>HA:</strong> ${r.ha_recommended ? 'Recommended — order 2 Macs' : 'Single-node sufficient'}</div>
+          <div class="meta" style="margin-top:6px">${e(r.hardware.rationale)}</div>
+        </div>
+        <div class="panel">
+          <h3>Model — primary + alternatives</h3>
+          <table>
+            <thead><tr><th>Model</th><th>Params</th><th>Quant</th><th>Size</th><th>Multilingual</th><th style="text-align:right">tps</th><th>Rationale</th></tr></thead>
+            <tbody>
+              <tr style="background: rgba(79,142,251,0.08)">
+                <td><code>${e(r.model.id)}</code> <span style="background:var(--primary);color:#0a0a0a;padding:1px 6px;border-radius:8px;font-size:9px;margin-left:4px">PRIMARY</span></td>
+                <td>${r.model.params_b}B${r.model.params_b_active ? ` (${r.model.params_b_active}B active)` : ''}</td>
+                <td>${e(r.model.quant)}</td>
+                <td>${r.model.size_gb} GB</td>
+                <td>${e(r.model.multilingual_quality)}</td>
+                <td style="text-align:right">${r.model.tps_m3ultra}</td>
+                <td class="meta">${e(r.model.rationale)}</td>
+              </tr>
+              ${altHtml}
+            </tbody>
+          </table>
+        </div>
+        <div class="panel">
+          <h3>Expected performance</h3>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">
+            <div><div class="meta">Single-user tps</div><div style="font-size:18px;font-weight:600">${r.expected_performance.tps_single}</div></div>
+            <div><div class="meta">Per-user tps at peak</div><div style="font-size:18px;font-weight:600">${r.expected_performance.tps_peak_per_user}</div></div>
+            <div><div class="meta">Cold load (s)</div><div style="font-size:18px;font-weight:600">${r.expected_performance.cold_load_s}</div></div>
+            <div><div class="meta">P50 latency (ms)</div><div style="font-size:18px;font-weight:600">${r.expected_performance.latency_p50_ms}</div></div>
+            <div><div class="meta">P95 latency (ms)</div><div style="font-size:18px;font-weight:600">${r.expected_performance.latency_p95_ms}</div></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>Onboarding checklist (${r.checklist.length} items)</h3>
+          <div class="meta" style="margin-bottom:8px">Tailored to this profile — HA / KSA / bulk-ingest steps appear only if applicable.</div>
+          <ul class="check-list">${checklistHtml}</ul>
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>

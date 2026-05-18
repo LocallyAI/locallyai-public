@@ -1,0 +1,82 @@
+name = "locallyai-monitor"
+main = "src/worker.ts"
+compatibility_date = "2025-09-01"
+
+# KV namespaces holding firm health state + alert log.
+# Operator creates with:
+#   npx wrangler kv namespace create monitor_firm_state
+#   npx wrangler kv namespace create monitor_alerts
+# Paste each printed `id` below.
+[[kv_namespaces]]
+binding = "FIRM_STATE"
+id      = "REPLACE_WITH_YOUR_OWN_KV_NAMESPACE_ID"
+
+[[kv_namespaces]]
+binding = "ALERTS"
+id      = "REPLACE_WITH_YOUR_OWN_KV_NAMESPACE_ID"
+
+# One-time-use install tokens minted by the intake form.
+# Operator creates with:
+#   npx wrangler kv namespace create monitor_intake_tokens
+# Paste the printed `id` below.
+[[kv_namespaces]]
+binding = "INTAKE_TOKENS"
+id      = "REPLACE_WITH_YOUR_OWN_KV_NAMESPACE_ID"
+
+# Per-firm telemetry tokens, auto-issued at form-submit time by the
+# /onboarding/mint-token endpoint. Maps firm_id → {token, firm_name,
+# registered_at, registered_ip, via}. 5-year TTL (heartbeats need the
+# token indefinitely; vendor can rotate via re-running onboard_firm.sh).
+# Operator creates with:
+#   npx wrangler kv namespace create monitor_telemetry_tokens
+# Paste the printed `id` below.
+[[kv_namespaces]]
+binding = "TELEMETRY_TOKENS"
+id      = "REPLACE_WITH_YOUR_OWN_KV_NAMESPACE_ID"
+
+# Per-IP rate-limit counters + TOTP replay defence + persistent recovery
+# code pool. Dedicated namespace so rate-limit churn doesn't pollute
+# INTAKE_TOKENS (round-2 A3) and recovery state survives deploys
+# (round-2 B1).
+# Operator creates with:
+#   npx wrangler kv namespace create monitor_rate_limits
+# Paste the printed `id` below.
+[[kv_namespaces]]
+binding = "RATE_LIMITS"
+id      = "REPLACE_WITH_YOUR_OWN_KV_NAMESPACE_ID"
+
+# Static dashboard files served from src/dashboard/. Bind via Pages
+# OR via the [[assets]] block (CF Workers v3+ supports static asset
+# bundling natively — no separate Pages project needed).
+[assets]
+directory = "src/dashboard"
+binding   = "ASSETS"
+
+# Cron: every 15 min, check for unacknowledged critical alerts that
+# have crossed SLA_WARN_HOURS and re-notify. The cron itself is
+# always installed but the handler short-circuits when
+# SLA_WARN_HOURS <= 0 (the default, see [vars] below) — that's the
+# "one email per (firm, code) until acked" behaviour. To re-enable
+# auto-escalation, set SLA_WARN_HOURS to a positive value.
+[triggers]
+crons = ["*/15 * * * *"]
+
+# Secrets (set via `wrangler secret put`):
+#   FIRM_TOKENS              JSON map {firm_id_hash: shared_token} — issued by vendor
+#   ADMIN_TOTP_SECRET_BASE32 same kind of secret as kill-switch — for dashboard auth
+#   ADMIN_RECOVERY_HASHED    JSON array of sha256 recovery codes
+#   RESEND_API_KEY           free-tier email dispatch (3000/mo)
+#   ALERT_TO_EMAIL           where critical alerts go (vendor on-call inbox)
+#   SLACK_WEBHOOK_URL        optional — Slack channel webhook for alert echo
+
+[vars]
+# 0 disables auto-escalation re-emails. With the per-(firm, code)
+# open-alert dedupe in handleHeartbeat, the desired behaviour is
+# normally "one email per incident until operator acks" — set
+# SLA_WARN_HOURS to a positive value (e.g. "3.5") to additionally
+# re-email after that many hours of no acknowledgement.
+SLA_WARN_HOURS = "0"
+SLA_CRIT_HOURS = "4"
+
+[observability]
+enabled = true

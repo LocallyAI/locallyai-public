@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>LocallyAI — firm onboarding intake</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a0a0a;
+      --surface: #161616;
+      --surface-2: #1f1f1f;
+      --border: #2a2a2a;
+      --text: #e7e7e7;
+      --muted: #8a8a8a;
+      --green: #4ade80;
+      --yellow: #facc15;
+      --red: #f87171;
+      --primary: #4f8efb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      font: 13.5px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: var(--bg); color: var(--text);
+    }
+    header {
+      padding: 18px 28px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 16px;
+    }
+    header h1 { margin: 0; font-size: 16px; font-weight: 600; }
+    header .pill { font-size: 11px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+    main { padding: 24px 28px 80px; max-width: 880px; margin: 0 auto; }
+    .intro {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 18px;
+      margin-bottom: 24px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .intro strong { color: var(--text); }
+    .intro a { color: var(--primary); }
+    section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-bottom: 18px;
+    }
+    section h2 {
+      font-size: 12px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted); margin: 0 0 4px;
+    }
+    section .why { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+    .priority { font-size: 10.5px; padding: 2px 7px; border-radius: 999px; margin-left: 8px; vertical-align: 2px; }
+    .priority.must  { background: rgba(248,113,113,0.15); color: var(--red); border: 1px solid rgba(248,113,113,0.4); }
+    .priority.should{ background: rgba(250,204,21,0.12);  color: var(--yellow); border: 1px solid rgba(250,204,21,0.4); }
+    .priority.nice  { background: rgba(74,222,128,0.10);  color: var(--green);  border: 1px solid rgba(74,222,128,0.35); }
+
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px; }
+    .row.full { grid-template-columns: 1fr; }
+    label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+    label .req { color: var(--red); margin-left: 4px; }
+    input[type="text"], input[type="email"], input[type="tel"], input[type="number"], select, textarea {
+      width: 100%; min-height: 36px; padding: 7px 10px;
+      background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 6px;
+      font-size: 13px; font-family: inherit;
+    }
+    textarea { min-height: 60px; resize: vertical; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); }
+    .checks { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 4px; }
+    .checks label { flex-direction: row; align-items: center; gap: 6px; color: var(--text); font-size: 13px; }
+    .checks input { width: auto; min-height: 0; }
+    .hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    .actions {
+      position: sticky; bottom: 0;
+      background: linear-gradient(to top, var(--bg) 70%, transparent);
+      padding: 18px 0 12px;
+      display: flex; gap: 10px; justify-content: flex-end;
+      margin-top: 24px;
+    }
+    button {
+      background: var(--primary); color: #0a0a0a;
+      border: 0; padding: 10px 18px; border-radius: 6px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    button.ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .preview {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-top: 14px;
+      max-height: 280px; overflow: auto;
+      font-family: ui-monospace, "SF Mono", monospace;
+      font-size: 11.5px; color: var(--muted);
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .firm-id-display {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-top: 10px;
+      font-family: ui-monospace, "SF Mono", monospace;
+      font-size: 12.5px;
+    }
+    .firm-id-display .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
+    .firm-id-display .value { color: var(--green); font-size: 14px; font-weight: 600; }
+
+    .mac-block {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      position: relative;
+    }
+    .mac-block .mac-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .mac-block .mac-label {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--muted); font-weight: 600;
+    }
+    .mac-block .remove-btn {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--muted); padding: 3px 9px; border-radius: 5px;
+      font-size: 11px; cursor: pointer;
+    }
+    .mac-block .remove-btn:hover { color: var(--red); border-color: var(--red); }
+
+    .bootstrap-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-bottom: 18px;
+      display: none;
+    }
+    .bootstrap-section.visible { display: block; }
+    .bootstrap-section h2 {
+      font-size: 12px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted); margin: 0 0 6px;
+    }
+    .bootstrap-section .why { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+    .bootstrap-cmd {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      font-family: ui-monospace, "SF Mono", monospace;
+      font-size: 11.5px;
+      color: var(--green);
+      word-break: break-all;
+      white-space: pre-wrap;
+      margin: 8px 0;
+      max-height: 200px;
+      overflow: auto;
+    }
+    .bootstrap-meta {
+      font-family: ui-monospace, "SF Mono", monospace;
+      font-size: 11px;
+      color: var(--muted);
+      margin: 6px 0;
+    }
+    .bootstrap-meta .label { color: var(--text); }
+    .bootstrap-meta .value { color: var(--green); }
+    .copy-btn {
+      background: var(--primary); color: #0a0a0a;
+      border: 0; padding: 6px 12px; border-radius: 5px;
+      font-size: 11.5px; font-weight: 600; cursor: pointer;
+      margin-top: 6px;
+    }
+    .copy-btn:active { transform: scale(0.97); }
+    .copy-btn.copied { background: var(--green); }
+    details { margin-top: 10px; }
+    details summary { cursor: pointer; color: var(--muted); font-size: 12px; padding: 4px 0; }
+    details summary:hover { color: var(--text); }
+    details pre {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-family: ui-monospace, "SF Mono", monospace;
+      font-size: 11px;
+      color: var(--muted);
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>LocallyAI — firm onboarding intake</h1>
+    <span class="pill">v1.0</span>
+  </header>
+
+  <main>
+    <div class="intro">
+      <p style="margin: 0 0 8px;"><strong>For: the IT contact at the onboarding firm.</strong> This form captures what the LocallyAI vendor team needs to support your deployment under the 4-hour incident SLA.</p>
+      <p style="margin: 0 0 8px;">Fields marked <span class="priority must">must</span> are required to operate the SLA; <span class="priority should">should</span> are collected within the first week; <span class="priority nice">nice</span> can be deferred. Nothing leaves your browser until you click <em>Generate &amp; download</em>; the form does not submit anywhere.</p>
+      <p style="margin: 0;">Once downloaded, email <strong>firm-profile.md</strong> to your LocallyAI vendor contact and keep <strong>install.env</strong> on the office Mac for the installer.</p>
+    </div>
+
+    <form id="onboarding" onsubmit="event.preventDefault(); generate();">
+
+      <section>
+        <h2>Identity &amp; contact <span class="priority must">must</span></h2>
+        <p class="why">Used to compute your anonymised firm_id, route incident calls to a human within the SLA window, and notify the right person on a data event.</p>
+
+        <div class="row full">
+          <label>Firm legal name <span class="req">*</span>
+            <input type="text" name="firm_name" required placeholder="Acme Solicitors LLP" />
+            <span class="hint">Used to compute the anonymised firm_id below. Use the legal name from your incorporation documents.</span>
+          </label>
+        </div>
+
+        <div class="firm-id-display" id="firmIdBox" style="display:none;">
+          <div class="label">Computed anonymised firm_id (vendor will register this)</div>
+          <div class="value" id="firmIdValue">—</div>
+        </div>
+
+        <div class="row">
+          <label>Primary IT contact — name <span class="req">*</span>
+            <input type="text" name="it_primary_name" required />
+          </label>
+          <label>Primary IT contact — email <span class="req">*</span>
+            <input type="email" name="it_primary_email" required />
+          </label>
+        </div>
+        <div class="row">
+          <label>Primary IT contact — phone <span class="req">*</span>
+            <input type="tel" name="it_primary_phone" required placeholder="+44 …" />
+            <span class="hint">Email alone is too slow for the 4-hour SLA. We will only call during incidents.</span>
+          </label>
+          <label>Time zone <span class="req">*</span>
+            <select name="time_zone" required>
+              <option value="">Select…</option>
+              <option>Europe/London (GMT/BST)</option>
+              <option>Asia/Riyadh (AST)</option>
+              <option>Asia/Dubai (GST)</option>
+              <option>Other</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="row">
+          <label>Secondary IT contact — name <span class="req">*</span>
+            <input type="text" name="it_secondary_name" required />
+          </label>
+          <label>Secondary IT contact — email <span class="req">*</span>
+            <input type="email" name="it_secondary_email" required />
+          </label>
+        </div>
+
+        <div class="row">
+          <label>DPO / compliance contact — name <span class="req">*</span>
+            <input type="text" name="dpo_name" required />
+          </label>
+          <label>DPO / compliance contact — email <span class="req">*</span>
+            <input type="email" name="dpo_email" required />
+            <span class="hint">For GDPR Art. 33 / PDPL Art. 31 breach notifications (72-hour clock).</span>
+          </label>
+        </div>
+
+        <div class="row">
+          <label>Office hours
+            <input type="text" name="office_hours" placeholder="Mon–Fri 09:00–18:00" />
+          </label>
+          <label>Out-of-hours escalation contact
+            <input type="text" name="ooh_contact" placeholder="On-call mobile, optional" />
+          </label>
+        </div>
+      </section>
+
+      <section>
+        <h2>Hardware &amp; environment <span class="priority must">must</span></h2>
+        <p class="why">Drives LLM model picker, storage planning, and incident triage (some failures are macOS-version-specific). Add one Mac per office machine running LocallyAI — primary + any HA secondaries.</p>
+
+        <div id="macList"></div>
+
+        <div style="margin: 4px 0 14px;">
+          <button type="button" class="ghost" onclick="addMac()" style="padding: 6px 12px; font-size: 12px;">+ Add another Mac</button>
+          <span class="hint" style="margin-left: 10px;">For 2-node HA fleets — add the secondary here.</span>
+        </div>
+
+        <div class="row">
+          <label>Physical location of the Mac(s) <span class="req">*</span>
+            <input type="text" name="mac_location" required placeholder="Server room / IT closet / partner's office" />
+            <span class="hint">For power-outage triage and on-site visit logistics. If split across rooms, list both.</span>
+          </label>
+          <label>UPS / power backup?
+            <select name="ups">
+              <option value="no">No</option>
+              <option value="yes">Yes</option>
+              <option value="planned">Planned</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <label>Internet connection type / bandwidth
+            <input type="text" name="internet" placeholder="Business fibre, 500 Mbps" />
+          </label>
+          <label>Air-conditioned room?
+            <select name="aircon">
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section>
+        <h2>Network &amp; IT <span class="priority should">should</span></h2>
+        <p class="why">Needed to write the firewall + CORS allowlist correctly and to plan client-app deployment to staff laptops.</p>
+
+        <div class="row">
+          <label>Office subnet (CIDR)
+            <input type="text" name="subnet" placeholder="192.168.1.0/24" />
+            <span class="hint">CORS allowlist + LuLu egress firewall both need this.</span>
+          </label>
+          <label>Outbound HTTP proxy in use?
+            <input type="text" name="proxy" placeholder="No / proxy.firm.com:8080" />
+          </label>
+        </div>
+        <div class="row">
+          <label>MDM in use
+            <select name="mdm">
+              <option value="">Select…</option>
+              <option>None</option>
+              <option>Jamf Pro</option>
+              <option>Munki</option>
+              <option>Microsoft Intune</option>
+              <option>Kandji</option>
+              <option>Mosyle</option>
+              <option>Other</option>
+            </select>
+            <span class="hint">For pushing the Worker / Manager .app bundles to staff laptops.</span>
+          </label>
+          <label>Backup mechanism for the office Mac
+            <input type="text" name="backup" placeholder="Time Machine to NAS / Arq / none" />
+          </label>
+        </div>
+        <div class="row full">
+          <label>Internal DNS — does <span style="font-family:monospace">office-mac.local</span> resolve from staff laptops?
+            <select name="mdns_works">
+              <option value="">Select…</option>
+              <option>Yes (mDNS works on this network)</option>
+              <option>No — must use IP address fallback</option>
+              <option>Unknown — vendor to test during install</option>
+            </select>
+          </label>
+        </div>
+        <div class="row full">
+          <label>Remote-staff access plan
+            <select name="remote_access">
+              <option value="">Select…</option>
+              <option value="on-lan-only">A — On-LAN only (office-network access; simplest)</option>
+              <option value="tailscale">B — Tailscale (firm-managed; recommended if remote needed)</option>
+              <option value="firm-vpn">C — Firm's existing corporate VPN</option>
+              <option value="cf-tunnel">D — Cloudflare Tunnel + Access (firm's own CF account)</option>
+              <option value="tbd">TBD — decide during onboarding</option>
+            </select>
+            <span class="hint">How fee-earners reach the office Mac from home / multi-office / on the road. Vendor never appears on the access path. See SOP chapter 4h (remote-access.md) for the full rationale per option.</span>
+          </label>
+        </div>
+      </section>
+
+      <section>
+        <h2>Compliance &amp; regulator <span class="priority must">must</span></h2>
+        <p class="why">Drives DPA template, breach-notification playbook, and audit cadence.</p>
+
+        <div class="row">
+          <label>Data residency region <span class="req">*</span>
+            <select name="data_region" required>
+              <option value="">Select…</option>
+              <option value="UK">UK (UK GDPR / DPA 2018)</option>
+              <option value="KSA">KSA (Saudi PDPL — Royal Decree M/19)</option>
+              <option value="OTHER">Other (specify in notes)</option>
+            </select>
+          </label>
+          <label>Primary regulator(s) <span class="req">*</span>
+            <input type="text" name="regulators" required placeholder="SRA + ICO" />
+            <span class="hint">SRA / FCA / ICO (UK); SDAIA / DIFC / ADGM (KSA &amp; Gulf).</span>
+          </label>
+        </div>
+        <div class="row">
+          <label>DPA executed?
+            <select name="dpa_signed">
+              <option value="no">Not yet</option>
+              <option value="yes">Yes</option>
+            </select>
+          </label>
+          <label>DPA signature date (if signed)
+            <input type="text" name="dpa_date" placeholder="YYYY-MM-DD" />
+          </label>
+        </div>
+        <div class="row">
+          <label>Audit-log retention preference
+            <select name="retention">
+              <option value="365">365 days (default)</option>
+              <option value="730">730 days</option>
+              <option value="1825">5 years</option>
+              <option value="other">Other (specify in notes)</option>
+            </select>
+          </label>
+          <label>Audit-export cadence
+            <select name="audit_cadence">
+              <option value="manual">Manual only (on demand)</option>
+              <option value="monthly">Monthly to DPO</option>
+              <option value="quarterly">Quarterly to DPO</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section>
+        <h2>Users &amp; rollout <span class="priority should">should</span></h2>
+        <p class="why">Used for sizing the deployment and planning admin-key issuance.</p>
+
+        <div class="row">
+          <label>Expected number of worker-tier users (lawyers)
+            <input type="number" name="user_count" min="0" placeholder="25" />
+          </label>
+          <label>Expected number of admin-tier users (managers)
+            <input type="number" name="admin_count" min="0" placeholder="3" />
+          </label>
+        </div>
+        <div class="row">
+          <label>Expected corpus size at go-live
+            <select name="corpus_size">
+              <option value="">Select…</option>
+              <option>Small (under 1,000 documents)</option>
+              <option>Medium (1k–100k documents)</option>
+              <option>Large (over 100k documents)</option>
+            </select>
+          </label>
+          <label>Languages used in documents / queries
+            <input type="text" name="languages" placeholder="English / English + Arabic" />
+          </label>
+        </div>
+      </section>
+
+      <section>
+        <h2>Telemetry &amp; updates <span class="priority should">should</span></h2>
+        <p class="why">Vendor health monitoring (anonymised heartbeats only — never document content) and update channel preference.</p>
+
+        <div class="checks">
+          <label><input type="checkbox" name="telemetry" checked /> Opt in to anonymised vendor health telemetry</label>
+        </div>
+        <div class="hint" style="margin: 4px 0 12px;">Only sends: firm_id hash, healthz status, disk %, RAM %, last-self-heal code. Never sends: document content, user names, queries, or response text. Disable any time with <span style="font-family:monospace">LOCALLYAI_TELEMETRY=0</span>.</div>
+
+        <div class="row">
+          <label>Update channel
+            <select name="update_channel">
+              <option value="stable">stable (recommended — 24h soak after dev)</option>
+              <option value="dev">dev (early access, vendor-only environments)</option>
+            </select>
+          </label>
+          <label>Maintenance window for tier-B updates
+            <input type="text" name="maintenance_window" placeholder="Sunday 02:00–06:00 local" />
+          </label>
+        </div>
+      </section>
+
+      <section>
+        <h2>Notes &amp; anything else <span class="priority nice">nice</span></h2>
+        <div class="row full">
+          <label>Anything specific to your firm we should know?
+            <textarea name="notes" placeholder="Existing CMS / DMS we'll need to read alongside (iManage, NetDocs, SharePoint…), known network quirks, partner sensitivities, planned office moves, etc."></textarea>
+          </label>
+        </div>
+      </section>
+
+      <div class="actions">
+        <button type="button" class="ghost" onclick="previewToggle()">Preview</button>
+        <button type="button" class="ghost" onclick="generateBootstrap()">Generate install command</button>
+        <button type="submit">Generate &amp; download</button>
+      </div>
+
+      <div class="preview" id="preview" style="display:none;"></div>
+
+      <section class="bootstrap-section" id="bootstrapSection">
+        <h2>Install command for the office Mac <span style="font-size:10.5px; color: var(--yellow); margin-left:8px; padding:2px 7px; border:1px solid rgba(250,204,21,0.4); border-radius:999px;">SINGLE-USE · 7-DAY EXPIRY</span></h2>
+        <p class="why">
+          Run this single command on the office Mac instead of the manual download + git-clone + .env-paste dance.
+          The bootstrap prompts your IT for the deploy key and telemetry token (paste from 1Password — never echoed),
+          clones the LocallyAI repo, writes <code>.env</code>, and runs <code>install.sh</code>.
+          <br/><br/>
+          <strong>The install link below is single-use</strong> — it consumes when the office Mac fetches it. A copy of the command pulled from email / scrollback / a shared shell history cannot be replayed. If the install fails midway, click <em>Generate install command</em> again for a fresh token.
+        </p>
+
+        <div class="bootstrap-meta">
+          <div><span class="label">Bootstrap URL:</span> <span id="bootstrapUrl" class="value">—</span></div>
+          <div><span class="label">SHA-256:</span> <span id="bootstrapHash" class="value">computing…</span></div>
+        </div>
+
+        <div class="os-tabs" style="display: flex; gap: 4px; margin: 8px 0 0;">
+          <button type="button" class="os-tab active" id="tabMac" onclick="switchOs('mac')" style="background: var(--accent); color: var(--accent-foreground); border: 1px solid var(--border); padding: 6px 12px; border-radius: 6px 6px 0 0; font-size: 12px; cursor: pointer;">macOS / Linux</button>
+          <button type="button" class="os-tab"        id="tabWin" onclick="switchOs('win')" style="background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 6px 12px; border-radius: 6px 6px 0 0; font-size: 12px; cursor: pointer;">Windows (PowerShell)</button>
+        </div>
+        <div class="bootstrap-cmd" id="bootstrapCmdMac">—</div>
+        <div class="bootstrap-cmd" id="bootstrapCmdWin" style="display: none;">—</div>
+        <button type="button" class="copy-btn" id="copyBtn" onclick="copyBootstrap()">Copy to clipboard</button>
+        <p class="why" id="winNotes" style="display: none; margin-top: 8px;">
+          <strong>Windows pre-reqs:</strong> Git for Windows (<code>git --version</code> works),
+          PowerShell 5.1+ (built in to Windows 10/11), and run as Administrator since
+          <code>install.ps1</code> requires it. The bootstrap will re-launch <code>install.ps1</code>
+          in an elevated window via UAC.
+        </p>
+
+        <div id="telemetrySection" style="display:none; margin-top: 18px; padding: 14px 16px; background: var(--surface-2); border: 1px solid rgba(74,222,128,0.4); border-radius: 8px;">
+          <div style="font-size: 11px; color: var(--green); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">
+            ✓ TELEMETRY TOKEN AUTO-ISSUED
+          </div>
+          <div class="bootstrap-meta">
+            <div><span class="label">firm_id:</span> <span id="telemetryFirmId" class="value">—</span></div>
+          </div>
+          <div class="bootstrap-cmd" id="telemetryToken" style="color: var(--green);">—</div>
+          <button type="button" class="copy-btn" id="copyTelBtn" onclick="copyTelemetryToken()">Copy token to clipboard</button>
+          <p class="why" style="margin-top: 10px; margin-bottom: 0;">
+            The install command above writes this token into <code>.env</code> automatically.
+            If the office Mac is <em>already</em> installed, IT can paste this value into <code>.env</code> as
+            <code>LOCALLYAI_TELEMETRY_TOKEN=&lt;value&gt;</code> without re-running the install,
+            then <code>launchctl kickstart -k gui/$(id -u)/app.locallyai.api</code> to pick it up.
+          </p>
+        </div>
+
+        <details>
+          <summary>Short unverified command (re-installs / dev only)</summary>
+          <pre id="verifyCmd">—</pre>
+          <p class="why" style="margin-top: 8px;">
+            These short commands skip GPG verification of the bootstrap. They trust the
+            Cloudflare-served bootstrap script verbatim. Use only for re-installs on a Mac that's
+            already running a healthy LocallyAI deployment, or for dev environments.
+            <strong>Production firm installs should use the GPG-verified commands in the primary tabs above</strong> —
+            they validate the bootstrap against the vendor's release-signing public key (fetched from GitHub raw,
+            an independent trust path from Cloudflare).
+          </p>
+        </details>
+      </section>
+    </form>
+  </main>
+
+  <script>
+    const firmNameInput = document.querySelector('[name="firm_name"]');
+    const firmIdBox = document.getElementById('firmIdBox');
+    const firmIdValue = document.getElementById('firmIdValue');
+
+    async function sha256Hex(s) {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+    }
+    async function computeFirmId(name) {
+      const trimmed = (name || '').trim();
+      if (!trimmed) return '';
+      const h = await sha256Hex(`locallyai-firm:${trimmed}`);
+      return h.slice(0, 16);
+    }
+
+    firmNameInput.addEventListener('input', async () => {
+      const id = await computeFirmId(firmNameInput.value);
+      if (id) {
+        firmIdBox.style.display = 'block';
+        firmIdValue.textContent = id;
+      } else {
+        firmIdBox.style.display = 'none';
+      }
+    });
+
+    // ── Mac list (1+ entries; primary required, secondaries optional) ──
+    const MAC_MODELS = [
+      'Mac mini M2',
+      'Mac mini M2 Pro',
+      'Mac mini M4',
+      'Mac mini M4 Pro',
+      'Mac Studio M2 Max',
+      'Mac Studio M2 Ultra',
+      'Mac Studio M3 Ultra',
+      'Mac Pro M2 Ultra',
+      'MacBook Pro M3 Pro',
+      'MacBook Pro M3 Max',
+      'MacBook Pro M4 Pro',
+      'MacBook Pro M4 Max',
+      'Other (specify in notes)',
+    ];
+    const RAM_OPTIONS = [
+      '16 GB','24 GB','32 GB','48 GB','64 GB','96 GB',
+      '128 GB','192 GB','256 GB','512 GB',
+    ];
+
+    let macSeq = 0;
+    function addMac(prefill = {}) {
+      macSeq += 1;
+      const i = macSeq;
+      const isPrimary = document.getElementById('macList').children.length === 0;
+      const wrap = document.createElement('div');
+      wrap.className = 'mac-block';
+      wrap.dataset.macIndex = i;
+      const removeBtn = isPrimary
+        ? ''
+        : `<button type="button" class="remove-btn" onclick="removeMac(${i})">Remove</button>`;
+      wrap.innerHTML = `
+        <div class="mac-header">
+          <span class="mac-label">${isPrimary ? 'Primary Mac' : 'Mac #' + i}</span>
+          ${removeBtn}
+        </div>
+        <div class="row">
+          <label>Model ${isPrimary ? '<span class="req">*</span>' : ''}
+            <select name="mac_model_${i}" ${isPrimary ? 'required' : ''}>
+              <option value="">Select…</option>
+              ${MAC_MODELS.map(m => `<option ${prefill.model === m ? 'selected' : ''}>${m}</option>`).join('')}
+            </select>
+          </label>
+          <label>Year / generation
+            <input type="text" name="mac_year_${i}" placeholder="2023" value="${prefill.year || ''}" />
+          </label>
+        </div>
+        <div class="row">
+          <label>Total RAM ${isPrimary ? '<span class="req">*</span>' : ''}
+            <select name="mac_ram_${i}" ${isPrimary ? 'required' : ''}>
+              <option value="">Select…</option>
+              ${RAM_OPTIONS.map(r => `<option ${prefill.ram === r ? 'selected' : ''}>${r}</option>`).join('')}
+            </select>
+          </label>
+          <label>Storage (total / free) ${isPrimary ? '<span class="req">*</span>' : ''}
+            <input type="text" name="mac_storage_${i}" ${isPrimary ? 'required' : ''} placeholder="2 TB / 1.7 TB free" value="${prefill.storage || ''}" />
+          </label>
+        </div>
+        <div class="row">
+          <label>macOS version ${isPrimary ? '<span class="req">*</span>' : ''}
+            <input type="text" name="mac_os_${i}" ${isPrimary ? 'required' : ''} placeholder="14.4 Sonoma" value="${prefill.os || ''}" />
+          </label>
+          <label>Role
+            <select name="mac_role_${i}">
+              <option ${isPrimary ? 'selected' : ''}>Primary (production)</option>
+              <option ${!isPrimary ? 'selected' : ''}>Secondary (HA failover)</option>
+              <option>Standby (manual cutover)</option>
+              <option>Dev / staging</option>
+            </select>
+          </label>
+        </div>
+      `;
+      document.getElementById('macList').appendChild(wrap);
+    }
+    function removeMac(i) {
+      const block = document.querySelector(`[data-mac-index="${i}"]`);
+      if (block) block.remove();
+    }
+    addMac(); // seed with one primary Mac
+
+    function readForm() {
+      const f = document.getElementById('onboarding');
+      const data = { macs: [] };
+      for (const el of f.elements) {
+        if (!el.name) continue;
+        if (el.name.startsWith('mac_') && /_(\d+)$/.test(el.name)) continue; // collected below
+        if (el.type === 'checkbox') data[el.name] = el.checked;
+        else data[el.name] = el.value.trim();
+      }
+      // Collect Mac blocks in DOM order.
+      document.querySelectorAll('.mac-block').forEach(block => {
+        const i = block.dataset.macIndex;
+        const get = field => (block.querySelector(`[name="mac_${field}_${i}"]`) || {}).value || '';
+        const mac = {
+          model: get('model').trim(),
+          year: get('year').trim(),
+          ram: get('ram').trim(),
+          storage: get('storage').trim(),
+          os: get('os').trim(),
+          role: get('role').trim(),
+        };
+        // Skip rows that are entirely blank (e.g. user added then cleared).
+        if (mac.model || mac.ram || mac.storage || mac.os) data.macs.push(mac);
+      });
+      return data;
+    }
+
+    function buildProfileMd(d, firmId, generatedAt) {
+      const yes = v => v ? 'yes' : 'no';
+      const f = (k, fallback='—') => d[k] ? d[k] : fallback;
+      return `# Firm profile — ${f('firm_name')}
+
+> Generated by the LocallyAI onboarding intake form on ${generatedAt}.
+> Filed by: ${f('it_primary_name')} (${f('it_primary_email')}).
+
+## Identity
+- **Firm legal name**: ${f('firm_name')}
+- **Anonymised firm_id**: \`${firmId}\`  *(register this in the monitor Worker FIRM_TOKENS map)*
+- **Time zone**: ${f('time_zone')}
+- **Office hours**: ${f('office_hours')}
+
+## Contacts
+| Role | Name | Email | Phone |
+|---|---|---|---|
+| Primary IT | ${f('it_primary_name')} | ${f('it_primary_email')} | ${f('it_primary_phone')} |
+| Secondary IT | ${f('it_secondary_name')} | ${f('it_secondary_email')} | — |
+| DPO / compliance | ${f('dpo_name')} | ${f('dpo_email')} | — |
+| Out-of-hours escalation | — | — | ${f('ooh_contact')} |
+
+## Office Macs (${(d.macs || []).length} machine${(d.macs || []).length === 1 ? '' : 's'})
+
+| # | Role | Model | Year | RAM | Storage | macOS |
+|---|---|---|---|---|---|---|
+${(d.macs || []).map((m, idx) => `| ${idx + 1} | ${m.role || '—'} | ${m.model || '—'} | ${m.year || '—'} | ${m.ram || '—'} | ${m.storage || '—'} | ${m.os || '—'} |`).join('\n')}
+
+- **Physical location**: ${f('mac_location')}
+- **UPS**: ${f('ups', 'no')}
+- **Internet**: ${f('internet')}
+- **Air-conditioned**: ${f('aircon', 'unknown')}
+
+## Network
+- **Office subnet (CIDR)**: ${f('subnet')}
+- **Outbound proxy**: ${f('proxy', 'none')}
+- **MDM**: ${f('mdm')}
+- **Backup**: ${f('backup')}
+- **mDNS (\`office-mac.local\`) resolves on staff laptops**: ${f('mdns_works')}
+- **Remote-staff access plan**: ${f('remote_access', 'TBD')}  *(see SOP §4h remote-access.md)*
+
+## Compliance
+- **Data region**: ${f('data_region')}
+- **Regulator(s)**: ${f('regulators')}
+- **DPA executed**: ${f('dpa_signed', 'no')}${d.dpa_date ? ` (signed ${d.dpa_date})` : ''}
+- **Audit-log retention**: ${f('retention')} days
+- **Audit-export cadence**: ${f('audit_cadence')}
+
+## Users
+- **Worker-tier users (lawyers)**: ${f('user_count', '—')}
+- **Admin-tier users (managers)**: ${f('admin_count', '—')}
+- **Corpus size at go-live**: ${f('corpus_size')}
+- **Languages**: ${f('languages')}
+
+## Telemetry &amp; updates
+- **Vendor health telemetry opt-in**: ${yes(d.telemetry)}
+- **Update channel**: ${f('update_channel', 'stable')}
+- **Maintenance window**: ${f('maintenance_window')}
+
+## Notes
+${d.notes || '_None._'}
+
+---
+
+## Vendor checklist (do not send back to firm)
+- [ ] Register firm_id \`${firmId}\` + new shared token in monitor Worker \`FIRM_TOKENS\` secret
+- [ ] File this profile in the vendor records repo as \`firms/${(d.firm_name||'unnamed').toLowerCase().replace(/[^a-z0-9]+/g,'-')}.md\`
+- [ ] DPA template selected (UK / KSA) and sent for counter-signature
+- [ ] Calendar reminder set: re-confirm this profile in 12 months
+- [ ] On-call rota updated with primary + secondary IT contact phone numbers
+`;
+    }
+
+    function buildEnvSnippet(d, firmId) {
+      const lines = [
+        '# Generated by the LocallyAI onboarding intake form.',
+        '# Paste these into .env on the office Mac BEFORE running install.sh.',
+        '# install.sh will pick up these values and skip the matching prompts.',
+        '',
+        `LOCALLYAI_FIRM_NAME=${JSON.stringify(d.firm_name || '')}`,
+        `LOCALLYAI_DATA_REGION=${d.data_region || 'UK'}`,
+      ];
+      if (d.telemetry) {
+        lines.push('LOCALLYAI_TELEMETRY=on');
+        // The Worker URL is the form's own origin — same Worker that hosts
+        // /onboarding.html also hosts /heartbeat. No reason for IT to
+        // configure this manually; bake it in.
+        lines.push(`LOCALLYAI_TELEMETRY_URL=${location.origin}`);
+        lines.push('# LOCALLYAI_TELEMETRY_TOKEN is auto-issued by the monitor Worker when');
+        lines.push(`# you click "Generate install command". Registered against firm_id ${firmId}.`);
+        lines.push('# The bootstrap script writes it into .env automatically — no separate');
+        lines.push('# 1Password share or vendor-side step needed. Vendor still has visibility');
+        lines.push('# (firm appears on dashboard within ~5 min of first heartbeat).');
+      } else {
+        lines.push('LOCALLYAI_TELEMETRY=off');
+      }
+      lines.push(`LOCALLYAI_UPDATE_CHANNEL=${d.update_channel || 'stable'}`);
+      if (d.subnet) {
+        lines.push('');
+        lines.push('# Used by CORS + egress allowlist:');
+        lines.push(`LOCALLYAI_OFFICE_SUBNET=${d.subnet}`);
+      }
+      lines.push('');
+      return lines.join('\n');
+    }
+
+    function download(filename, content) {
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+    }
+
+    async function generate() {
+      const d = readForm();
+      const firmId = await computeFirmId(d.firm_name);
+      const generatedAt = new Date().toISOString().slice(0,10);
+      const md = buildProfileMd(d, firmId, generatedAt);
+      const env = buildEnvSnippet(d, firmId);
+      const slug = (d.firm_name || 'firm').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+      const mdName = `firm-profile-${slug}.md`;
+      const envName = `install-${slug}.env`;
+
+      // Two downloads back-to-back: some browsers (Safari especially) silently
+      // drop the second if they fire in the same task. Stagger them with a
+      // short delay AND offer manual re-download links in case one is still
+      // blocked by the browser's "multiple downloads" prompt.
+      download(mdName, md);
+      await new Promise(r => setTimeout(r, 400));
+      download(envName, env);
+
+      // Confirmation panel — also shows clickable re-download links so the
+      // user can fetch either file again without re-filling the form.
+      let panel = document.getElementById('downloadStatus');
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'downloadStatus';
+        panel.style.cssText = 'background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-top: 14px;';
+        document.querySelector('.actions').after(panel);
+      }
+      panel.innerHTML = `
+        <div style="font-size: 12px; color: var(--muted); margin-bottom: 8px;">DOWNLOADS TRIGGERED</div>
+        <div style="display: flex; gap: 18px; flex-wrap: wrap;">
+          <a href="#" onclick="redownload('md', event)" style="color: var(--primary);">${mdName}</a>
+          <a href="#" onclick="redownload('env', event)" style="color: var(--primary);">${envName}</a>
+        </div>
+        <div style="font-size: 11.5px; color: var(--muted); margin-top: 10px;">
+          Don't see a file in your Downloads folder? Click its name above to re-download — your browser may have blocked one of the two simultaneous downloads.
+        </div>
+      `;
+      // Stash payloads on the panel for re-download.
+      panel.dataset.md = btoa(unescape(encodeURIComponent(md)));
+      panel.dataset.env = btoa(unescape(encodeURIComponent(env)));
+      panel.dataset.mdName = mdName;
+      panel.dataset.envName = envName;
+    }
+
+    function redownload(which, ev) {
+      ev.preventDefault();
+      const panel = document.getElementById('downloadStatus');
+      const b64 = which === 'md' ? panel.dataset.md : panel.dataset.env;
+      const name = which === 'md' ? panel.dataset.mdName : panel.dataset.envName;
+      const content = decodeURIComponent(escape(atob(b64)));
+      download(name, content);
+    }
+
+    async function previewToggle() {
+      const p = document.getElementById('preview');
+      if (p.style.display === 'none') {
+        const d = readForm();
+        const firmId = await computeFirmId(d.firm_name);
+        p.textContent = buildProfileMd(d, firmId, new Date().toISOString().slice(0,10));
+        p.style.display = 'block';
+      } else {
+        p.style.display = 'none';
+      }
+    }
+
+    // ── Bootstrap one-liner generator ────────────────────────────────
+    const BOOTSTRAP_URL = `${location.origin}/bootstrap`;
+    const PUBKEY_URL = 'https://raw.githubusercontent.com/LocallyAI/locallyai/main/docs/release-signing-key.gpg';
+    let cachedBootstrapHash = null;
+
+    async function fetchBootstrapHash() {
+      if (cachedBootstrapHash) return cachedBootstrapHash;
+      try {
+        const r = await fetch(BOOTSTRAP_URL, { cache: 'no-store' });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const text = await r.text();
+        cachedBootstrapHash = await sha256Hex(text);
+        return cachedBootstrapHash;
+      } catch (e) {
+        return `(fetch failed — ${e.message})`;
+      }
+    }
+
+    async function generateBootstrap() {
+      const d = readForm();
+      if (!d.firm_name) {
+        alert('Fill in at least the firm legal name first.');
+        return;
+      }
+      const firmId = await computeFirmId(d.firm_name);
+      const env = buildEnvSnippet(d, firmId);
+      // base64-encode the env block (no whitespace, browser-safe).
+      const blob = btoa(unescape(encodeURIComponent(env)));
+      // Full firm profile (.md) — sent to the Worker alongside the intake
+      // blob so the vendor's on-call inbox receives the firm record
+      // automatically. No "please email this back" follow-up.
+      const profileMd = buildProfileMd(d, firmId, new Date().toISOString().slice(0,10));
+
+      // Mint a one-time-use token. The Worker stores the blob server-side
+      // and returns a token; the install command fetches via /onboarding/intake
+      // which atomically consumes the token on first read.
+      document.getElementById('bootstrapSection').classList.add('visible');
+      document.getElementById('bootstrapCmdMac').textContent = 'minting one-time install token…';
+      document.getElementById('bootstrapCmdWin').textContent = 'minting one-time install token…';
+      document.getElementById('verifyCmd').textContent = '';
+      document.getElementById('bootstrapHash').textContent = 'computing…';
+      document.getElementById('bootstrapSection').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      let token, telemetryToken, telemetryFirmId;
+      try {
+        const r = await fetch('/onboarding/mint-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ intake_blob: blob, profile_md: profileMd }),
+        });
+        if (!r.ok) {
+          const body = await r.text();
+          throw new Error(`HTTP ${r.status}: ${body.slice(0, 200)}`);
+        }
+        const j = await r.json();
+        token = j.token;
+        telemetryToken = j.telemetry_token;
+        telemetryFirmId = j.telemetry_auto_issued?.firm_id;
+        if (!token) throw new Error('mint-token returned no token');
+      } catch (e) {
+        const errMsg =
+          `Could not mint a one-time install token: ${e.message}\n\n` +
+          `If your CF Worker is older and doesn't expose /onboarding/mint-token, ` +
+          `redeploy via:  cd docs/monitor/cloudflare-worker && npx wrangler deploy`;
+        document.getElementById('bootstrapCmdMac').textContent = errMsg;
+        document.getElementById('bootstrapCmdWin').textContent = errMsg;
+        document.getElementById('bootstrapHash').textContent = '(n/a)';
+        return;
+      }
+
+      const intakeUrl = `${location.origin}/onboarding/intake?t=${token}`;
+      const bootstrapPs1Url = `${location.origin}/bootstrap.ps1`;
+
+      // PRIMARY commands are GPG-verified. Red-team finding 7.1: the
+      // previous default was unverified `curl | bash`, which trusts
+      // Cloudflare account integrity entirely. The verified form
+      // imports the vendor's public key from GitHub raw (independent
+      // trust path: GitHub account integrity, separate vendor), fetches
+      // bootstrap + signature from CF, verifies before executing.
+      // Production firms should always use these. The short forms below
+      // are an explicit "advanced / re-install" alternative.
+      const macCmd =
+`# Verified install command — checks the GPG signature before running.
+# Prereqs: gnupg installed (\`brew install gnupg\` on macOS).
+curl -fsSL ${PUBKEY_URL} | gpg --import 2>/dev/null
+curl -fsSL ${BOOTSTRAP_URL}     -o /tmp/locallyai-bootstrap
+curl -fsSL ${BOOTSTRAP_URL}.sig -o /tmp/locallyai-bootstrap.sig
+gpg --verify /tmp/locallyai-bootstrap.sig /tmp/locallyai-bootstrap \\
+  && LOCALLYAI_INTAKE_URL="${intakeUrl}" bash /tmp/locallyai-bootstrap`;
+
+      const winCmd =
+`# Verified install command — checks the GPG signature before running.
+# Prereqs: gnupg installed (\`winget install GnuPG.GnuPG\` or Git for Windows includes gpg).
+irm ${PUBKEY_URL} -OutFile $env:TEMP\\release-signing-key.gpg
+gpg --import $env:TEMP\\release-signing-key.gpg 2>$null
+irm ${bootstrapPs1Url}     -OutFile $env:TEMP\\locallyai-bootstrap.ps1
+irm ${bootstrapPs1Url}.sig -OutFile $env:TEMP\\locallyai-bootstrap.ps1.sig
+gpg --verify $env:TEMP\\locallyai-bootstrap.ps1.sig $env:TEMP\\locallyai-bootstrap.ps1
+if ($LASTEXITCODE -eq 0) {
+  $env:LOCALLYAI_INTAKE_URL='${intakeUrl}'
+  & $env:TEMP\\locallyai-bootstrap.ps1
+}`;
+
+      // SHORT FORMS — unverified, single-curl pipe. Kept for re-installs
+      // / dev environments where speed > supply-chain hygiene.
+      const macShortCmd =
+        `curl -fsSL ${BOOTSTRAP_URL} | LOCALLYAI_INTAKE_URL="${intakeUrl}" bash`;
+      const winShortCmd =
+        `$env:LOCALLYAI_INTAKE_URL='${intakeUrl}'; iex (irm ${bootstrapPs1Url})`;
+      const verifyCmd =
+`# These short commands skip GPG verification.
+# Use ONLY for re-installs or dev environments where you trust the CF
+# account integrity end-to-end. Production firms should use the
+# verified commands shown in the primary tabs above.
+
+# macOS / Linux:
+${macShortCmd}
+
+# Windows (PowerShell):
+${winShortCmd}
+
+# Note: install token is single-use and expires after 7 days.
+# Regenerate the command from the form for a fresh token.`;
+
+      document.getElementById('bootstrapUrl').textContent = BOOTSTRAP_URL;
+      document.getElementById('bootstrapCmdMac').textContent = macCmd;
+      document.getElementById('bootstrapCmdWin').textContent = winCmd;
+      document.getElementById('verifyCmd').textContent = verifyCmd;
+      const h = await fetchBootstrapHash();
+      document.getElementById('bootstrapHash').textContent = h;
+
+      // Surface the auto-issued telemetry token directly. The install
+      // command above writes it into .env automatically — but if the
+      // firm's office Mac is already installed, IT can paste this value
+      // straight into .env without re-running the install.
+      const telSection = document.getElementById('telemetrySection');
+      if (telemetryToken) {
+        document.getElementById('telemetryToken').textContent = telemetryToken;
+        document.getElementById('telemetryFirmId').textContent = telemetryFirmId || '—';
+        telSection.style.display = 'block';
+      } else {
+        telSection.style.display = 'none';
+      }
+    }
+
+    function copyTelemetryToken() {
+      const t = document.getElementById('telemetryToken').textContent;
+      navigator.clipboard.writeText(t).then(() => {
+        const btn = document.getElementById('copyTelBtn');
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copied';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+      });
+    }
+
+    let activeOs = 'mac';
+    function switchOs(os) {
+      activeOs = os;
+      document.getElementById('bootstrapCmdMac').style.display = (os === 'mac') ? 'block' : 'none';
+      document.getElementById('bootstrapCmdWin').style.display = (os === 'win') ? 'block' : 'none';
+      document.getElementById('winNotes').style.display = (os === 'win') ? 'block' : 'none';
+      const tabMac = document.getElementById('tabMac');
+      const tabWin = document.getElementById('tabWin');
+      const activeStyle = 'background: var(--accent); color: var(--accent-foreground); border: 1px solid var(--border); padding: 6px 12px; border-radius: 6px 6px 0 0; font-size: 12px; cursor: pointer;';
+      const inactiveStyle = 'background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 6px 12px; border-radius: 6px 6px 0 0; font-size: 12px; cursor: pointer;';
+      tabMac.style.cssText = (os === 'mac') ? activeStyle : inactiveStyle;
+      tabWin.style.cssText = (os === 'win') ? activeStyle : inactiveStyle;
+    }
+
+    function copyBootstrap() {
+      const id = (activeOs === 'win') ? 'bootstrapCmdWin' : 'bootstrapCmdMac';
+      const cmd = document.getElementById(id).textContent;
+      navigator.clipboard.writeText(cmd).then(() => {
+        const btn = document.getElementById('copyBtn');
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copied';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+      });
+    }
+  </script>
+</body>
+</html>

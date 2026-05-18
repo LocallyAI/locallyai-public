@@ -1,0 +1,14 @@
+{
+  "name": "locallyai-worker-tauri",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone client app for the LocallyAI Workspace — connects to the firm's office server.",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.4.0"
+  }
+}

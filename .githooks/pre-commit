@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Pre-commit reminder: nudge to update the SOP whenever a tracked code
+# path changes without a corresponding docs/SOP* edit. Best-effort —
+# never blocks a commit, just prints a yellow warning.
+#
+# To enable in a fresh clone:
+#   git config core.hooksPath .githooks
+
+set -e
+
+# Files whose changes should trigger an SOP update (anchored to repo root).
+WATCHED='^(api\.py|config\.py|supervisor\.py|os_supervisor\.py|mlx_inference\.py|inference_gate\.py|fleet\.py|sync_conflicts\.py|shared_lock\.py|platform_compat\.py|manage_users\.py|install\.sh|install\.ps1|update\.sh|uninstall\.sh|requirements\.txt|scripts/)'
+
+# Are any watched files staged?
+changed_code=$(git diff --cached --name-only --diff-filter=ACMR | grep -E "$WATCHED" || true)
+[ -z "$changed_code" ] && exit 0
+
+# Are any SOP/* docs staged alongside?
+changed_sop=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^(docs/SOP\.md|docs/sop/)' || true)
+if [ -n "$changed_sop" ]; then
+    # SOP touched in the same commit — assume the author handled it.
+    exit 0
+fi
+
+{
+  printf '\n'
+  printf '\033[33m[sop-reminder]\033[0m One or more tracked code paths changed:\n'
+  echo "$changed_code" | sed 's/^/  /'
+  printf '\n'
+  printf '\033[33m[sop-reminder]\033[0m Did you update docs/SOP* in this commit?\n'
+  printf '  - docs/SOP.md (master index)\n'
+  printf '  - docs/sop/CHANGELOG.md (one-line entry)\n'
+  printf '  - relevant chapter under docs/sop/\n'
+  printf '\n'
+  printf '\033[33m[sop-reminder]\033[0m If this change is purely internal (refactor, comment, behaviour-\n'
+  printf '                  preserving fix), the commit proceeds normally — this is just a nudge.\n'
+  printf '                  If it changes operator-visible behaviour, ABORT (Ctrl+C now), update the\n'
+  printf '                  SOP, re-stage, and retry the commit.\n'
+  printf '\n'
+} >&2
+
+# Best-effort: never block.
+exit 0

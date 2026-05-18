@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LocallyAI · Fleet</title>
+    <script>
+      // Region-aware lang/dir before React mounts. The runtime override
+      // below uses localStorage["locallyai_lang"]; the build-time default
+      // comes from VITE_DEFAULT_LANG (set by install.sh per region).
+      // Vite replaces %VITE_DEFAULT_LANG% from .env at build time.
+      (function () {
+        try {
+          var lang = localStorage.getItem("locallyai_lang");
+          if (lang !== "ar" && lang !== "en") {
+            lang = "%VITE_DEFAULT_LANG%" === "ar" ? "ar" : "en";
+          }
+          document.documentElement.setAttribute("lang", lang);
+          document.documentElement.setAttribute("dir", lang === "ar" ? "rtl" : "ltr");
+        } catch (e) { /* ignore */ }
+      })();
+    </script>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0b0d10;
+        --panel: #14181d;
+        --border: #232a33;
+        --text: #e7ecf2;
+        --muted: #8a96a3;
+        --ok: #21c275;
+        --warn: #f0b429;
+        --err: #ef4444;
+        --link: #7aa2ff;
+      }
+      html, body, #app { height: 100%; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.45 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

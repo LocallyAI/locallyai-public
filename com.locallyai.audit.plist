@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  com.locallyai.audit.plist — weekly install-health audit for LocallyAI.
+  Runs production/scripts/audit_install.sh every Sunday at 09:00 LOCAL time.
+
+  To activate (after install.sh has placed the source at $HOME/locallyai):
+    1. Replace DIR_PLACEHOLDER below with $HOME/locallyai. One-liner:
+       sed -i '' "s|DIR_PLACEHOLDER|$HOME/locallyai|g" \
+         production/com.locallyai.audit.plist
+    2. cp production/com.locallyai.audit.plist $HOME/Library/LaunchAgents/
+    3. launchctl load $HOME/Library/LaunchAgents/com.locallyai.audit.plist
+
+  The audit report lands in production/logs/install_audit_YYYY-MM-DD.log.
+  If LOCALLYAI_ALERT_WEBHOOK_URL is set in .env, failures are POSTed.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.locallyai.audit</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>DIR_PLACEHOLDER/production/scripts/audit_install.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>DIR_PLACEHOLDER/production</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>DIR_PLACEHOLDER/production/logs/audit_stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>DIR_PLACEHOLDER/production/logs/audit_stderr.log</string>
+
+  <!-- Weekly: Sunday at 09:00 local time. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>0</integer>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
