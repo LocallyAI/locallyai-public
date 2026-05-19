@@ -41,29 +41,25 @@ get edited — they get *superseded* by a new ADR that links back).
   one it replaces; the *old* ADR stays in place with its status
   flipped.
 
-## Planned ADRs
+## Index
 
-The following decisions in the current codebase are worth ADR-ing.
-They haven't been written yet — placeholder list for the author to
-expand as time allows:
+| # | Title | Status |
+|---|---|---|
+| [0001](0001-hybrid-retrieval-rrf-rerank.md) | Hybrid retrieval (Qdrant + BM25 → RRF fusion → cross-encoder rerank) | accepted |
+| [0002](0002-qdrant-as-vector-store.md) | Qdrant as the vector store (embedded → external for HA) | accepted |
+| [0003](0003-hmac-chained-audit-log.md) | HMAC-chained audit log for tamper evidence | accepted |
+| [0004](0004-desktop-clients-swift-and-tauri.md) | Native Swift wrappers (Mac) + Tauri (Windows) for desktop clients | accepted |
+| [0005](0005-mac-ha-syncthing-rsync.md) | Two-node Mac HA via Syncthing (governance) + rsync (corpus) | accepted |
+| [0006](0006-openai-compatible-api-surface.md) | OpenAI-compatible API as the first-class interface | accepted |
+| [0007](0007-bilingual-uk-ksa-regional-defaults.md) | Single multi-region build with regional defaults (UK + KSA, EN/AR) | accepted |
+| [0008](0008-multi-backend-inference.md) | Multi-backend inference (MLX + Ollama + LM Studio) behind one interface | accepted |
+| [0009](0009-cloudflare-workers-tiebreaker.md) | Cloudflare Workers as external tiebreaker, kill switch, onboarding gateway | accepted |
+| [0010](0010-acl-post-filter-before-rerank.md) | Per-document ACL as a post-filter applied BEFORE cross-encoder rerank | accepted |
+| [0011](0011-agpl-3-public-mirror.md) | AGPL-3.0 as the licence for the public mirror | accepted |
 
-| Proposed # | Topic |
-|---|---|
-| 0001 | RRF fusion + cross-encoder rerank vs single-stage retrieval (why not just BM25, why not just dense, why a 2-stage pipeline at 50K+ docs) |
-| 0002 | Qdrant vs alternatives (LanceDB, pgvector, Weaviate, Milvus) for embedded single-node + future external HA |
-| 0003 | HMAC chain for audit-log integrity vs blockchain / Merkle-tree / signed-line approaches |
-| 0004 | Tauri + native Swift wrappers vs Electron vs pure browser for staff-laptop clients |
-| 0005 | 2-node Mac HA with Syncthing + rsync vs Postgres replication vs DRBD vs S3-backed shared-state |
-| 0006 | OpenAI-compatible API surface as the first-class interface (vs a bespoke API) |
-| 0007 | Multi-region UK + KSA bilingual deployment — regional defaults vs single-tenant per-region forks |
-| 0008 | MLX vs Ollama vs LM Studio as the inference backend — when each wins, why the abstraction is worth maintaining |
-| 0009 | Cloudflare Workers as the external HA tiebreaker + kill-switch + onboarding gateway (vs running our own VPS or skipping the tiebreaker entirely) |
-| 0010 | Per-document ACLs as a post-filter on the retrieved candidate pool vs Qdrant-side filtering (why ACL precedes rerank in the pipeline) |
-| 0011 | AGPL-3.0 as the licence for the public mirror — copyleft vs permissive trade-off given the commercial parent |
-
-These are the load-bearing calls in the project that future-me (and
-any prospective collaborator) would benefit from seeing argued out
-on paper.
+These are the load-bearing calls in the project — the ones future-me
+(or any prospective collaborator) would benefit from seeing argued
+out on paper rather than re-derived from the code.
 
 ## Writing a new ADR
 
