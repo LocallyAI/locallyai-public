@@ -1,5 +1,7 @@
 # LocallyAI — public mirror
 
+[![CI](https://github.com/LocallyAI/locallyai-public/actions/workflows/ci.yml/badge.svg)](https://github.com/LocallyAI/locallyai-public/actions/workflows/ci.yml)
+
 > **This is a sanitised public mirror of an active commercial project.** Operator identifiers, customer references, and infrastructure IDs have been scrubbed; the engineering substance is intact. It exists primarily as a portfolio artifact for engineering managers and recruiters evaluating the author. If you'd like to use the project itself, see [Contact](#contact) below.
 
 ## What LocallyAI is
