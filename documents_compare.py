@@ -30,9 +30,7 @@ from __future__ import annotations
 import difflib
 import json
 import logging
-import os
 import re
-from typing import Optional
 
 log = logging.getLogger("documents_compare")
 
@@ -64,7 +62,6 @@ def _split_sections(text: str) -> list[tuple[str, str]]:
     if matches:
         sections = []
         for i, m in enumerate(matches):
-            start = m.start()
             end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
             heading = m.group(0).strip()
             body = text[m.end():end].strip()
@@ -103,13 +100,13 @@ def _classify_change(a: str, b: str) -> str:
 
 # ── Heading alignment ──────────────────────────────────────────────────────
 
-def _align(headings_a: list[str], headings_b: list[str]) -> list[tuple[Optional[int], Optional[int]]]:
+def _align(headings_a: list[str], headings_b: list[str]) -> list[tuple[int | None, int | None]]:
     """Use SequenceMatcher over heading strings (normalised) to produce
     aligned index pairs. (None, j) → b-only; (i, None) → a-only."""
     norm_a = [_norm_for_diff(h).lower() for h in headings_a]
     norm_b = [_norm_for_diff(h).lower() for h in headings_b]
     sm = difflib.SequenceMatcher(a=norm_a, b=norm_b, autojunk=False)
-    pairs: list[tuple[Optional[int], Optional[int]]] = []
+    pairs: list[tuple[int | None, int | None]] = []
     for tag, i1, i2, j1, j2 in sm.get_opcodes():
         if tag == "equal":
             for k in range(i2 - i1):

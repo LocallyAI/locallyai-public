@@ -1,0 +1,19 @@
+# LocallyAI — ML runtime dependencies (on top of requirements-core.txt).
+#
+# Heavy. ~1 GB on Linux including PyTorch; ~600 MB on macOS via the
+# Apple-MPS-only torch wheel. Install when:
+#   - EMBED_BACKEND=local (in-process sentence-transformers embeddings)
+#   - You're developing on Apple Silicon and want the full MLX inference path
+#
+# CI does NOT install this file — the smoke test runs against
+# requirements-core.txt only. This is deliberate: Ubuntu CI runners
+# don't have Metal / MPS, and the install time alone (5-10 min) is
+# disproportionate for a smoke test.
+
+# In-process embeddings (EMBED_BACKEND=local). Pulls PyTorch.
+sentence-transformers>=3.0.0,<5.0.0
+einops>=0.7.0,<1.0.0    # required by nomic-embed-text-v1.5
+
+# Apple Silicon MLX backend — optional, install only when LOCALLYAI_BACKEND=mlx
+# and you're on an Apple Silicon Mac. Comment IN as needed.
+# mlx-lm>=0.10.0

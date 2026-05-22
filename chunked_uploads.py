@@ -61,10 +61,8 @@ import shutil
 import threading
 import time
 import uuid as _uuid
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional
-
 
 log = logging.getLogger("chunked_uploads")
 
@@ -125,7 +123,7 @@ class UploadMeta:
     filename: str
     total_bytes: int
     received_bytes: int
-    sha256_expected: Optional[str]
+    sha256_expected: str | None
     sha256_running: str  # hex digest of partial hasher state? no — we recompute
     owner_user: str
     started_at: float
@@ -141,7 +139,7 @@ def _part_path(upload_id: str) -> Path:
     return _PARTS_DIR / f"{upload_id}.part"
 
 
-def _load_meta(upload_id: str) -> Optional[UploadMeta]:
+def _load_meta(upload_id: str) -> UploadMeta | None:
     p = _meta_path(upload_id)
     if not p.exists():
         return None
@@ -187,7 +185,7 @@ class UploadError(Exception):
 
 
 # ── Core operations ───────────────────────────────────────────────────────────
-def init_upload(*, filename: str, total_bytes: int, sha256: Optional[str], owner_user: str) -> dict:
+def init_upload(*, filename: str, total_bytes: int, sha256: str | None, owner_user: str) -> dict:
     try:
         safe = _safe_filename(filename)
     except ValueError as exc:
@@ -306,7 +304,7 @@ def append_chunk(*, upload_id: str, content_range: str, data: bytes, owner_user:
     }
 
 
-def complete_upload(*, upload_id: str, sha256: Optional[str], owner_user: str) -> tuple[Path, str, int]:
+def complete_upload(*, upload_id: str, sha256: str | None, owner_user: str) -> tuple[Path, str, int]:
     """Verify the assembled file and atomically promote it to the live
     upload dir. Returns (final_path, stored_as, bytes). The caller is
     responsible for handing final_path off to the ingest queue."""
@@ -382,7 +380,7 @@ def cancel_upload(*, upload_id: str, owner_user: str) -> None:
 
 
 # ── Maintenance ───────────────────────────────────────────────────────────────
-def gc_stale(now: Optional[float] = None) -> int:
+def gc_stale(now: float | None = None) -> int:
     """Remove .part + .meta files whose last chunk is older than the GC
     window. Called by the sentinel periodically. Returns count removed."""
     now = now or time.time()

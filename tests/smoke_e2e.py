@@ -93,7 +93,7 @@ def make_fake_llm(port: int) -> threading.Thread:
     server = socketserver.TCPServer(("127.0.0.1", port), Handler)
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
-    setattr(t, "_server", server)
+    t._server = server
     return t
 
 

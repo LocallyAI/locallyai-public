@@ -38,9 +38,8 @@ import shutil
 import subprocess
 import time
 import urllib.request
+from datetime import UTC
 from pathlib import Path
-from typing import Optional
-
 
 log = logging.getLogger("deploy")
 
@@ -124,14 +123,16 @@ def _audit(event: str, **fields):
     in api.py so deploy events sit in the same chain as everything
     else."""
     try:
-        from datetime import datetime, timezone
-        import hashlib as _hl, hmac as _hmac
-        from config import LOG_DIR, NODE_ID, DATA_REGION, current_salt_era
+        import hashlib as _hl
+        import hmac as _hmac
+        from datetime import datetime
+
+        from config import DATA_REGION, LOG_DIR, NODE_ID, current_salt_era
         log_path = LOG_DIR / "audit.log"
         chain_state = LOG_DIR / ".audit_chain"
         hmac_key = os.environ.get("LOCALLYAI_AUDIT_HMAC_KEY", "").encode()
         entry = {
-            "timestamp":   datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "timestamp":   datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "node_id":     NODE_ID,
             "data_region": DATA_REGION,
             "salt_era":    current_salt_era(),
@@ -251,7 +252,7 @@ def apply_tag(tag: str) -> dict:
     return result
 
 
-def _rollback(previous_ref: str, stash_pushed: bool, _audit_extra: Optional[dict] = None):
+def _rollback(previous_ref: str, stash_pushed: bool, _audit_extra: dict | None = None):
     log.warning("Rolling back to %s", previous_ref)
     _git(["checkout", "-q", previous_ref])
     _restart_api()

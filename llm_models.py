@@ -18,14 +18,11 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 import shutil
 import subprocess
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
-
 
 log = logging.getLogger("llm_models")
 
@@ -92,7 +89,7 @@ CURATED: list[CuratedModel] = [
 
 # ── State ────────────────────────────────────────────────────────────────────
 _download_lock = threading.Lock()
-_download_in_flight: Optional[str] = None
+_download_in_flight: str | None = None
 _download_log: list[str] = []  # ring buffer of recent log lines
 
 

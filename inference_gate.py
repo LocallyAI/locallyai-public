@@ -29,7 +29,9 @@ for short prompts complete in a couple of seconds; a 24-deep queue
 drains in roughly 8 seconds at full throughput.
 """
 from __future__ import annotations
-import os, threading, time
+
+import os
+import threading
 from contextlib import contextmanager
 
 _MAX_INFLIGHT = max(1, int(os.environ.get("LOCALLYAI_MAX_CONCURRENT_INFERENCE", "6")))

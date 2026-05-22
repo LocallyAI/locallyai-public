@@ -14,7 +14,11 @@ whichever signals exist on this platform plus, on Windows, a console
 control handler so Ctrl+C / service-stop messages still drain cleanly.
 """
 from __future__ import annotations
-import os, signal, subprocess, sys
+
+import os
+import signal
+import subprocess
+import sys
 from typing import Callable
 
 IS_WINDOWS = os.name == "nt"

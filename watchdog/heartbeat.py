@@ -1,7 +1,12 @@
 # Agent 2: Heartbeat -- probes API health, triggers Resurrector after 3 failures
-import os, sys, time, json, logging, subprocess, urllib.request
+import logging
+import os
+import subprocess
+import sys
+import time
+import urllib.request
+from datetime import UTC, datetime
 from pathlib import Path
-from datetime import datetime, timezone
 
 BASE_DIR   = Path(__file__).resolve().parent.parent
 LOG_DIR    = BASE_DIR / 'logs'
@@ -18,7 +23,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [HEARTBEAT] %(messag
 log = logging.getLogger('heartbeat')
 
 def _log(event: str, detail: str = ''):
-    entry = {'timestamp': datetime.now(timezone.utc).isoformat(),
+    entry = {'timestamp': datetime.now(UTC).isoformat(),
              'event': event, 'detail': detail}
     with open(HB_LOG, 'a', encoding='utf-8') as f:
         f.write(__import__('json').dumps(entry) + '\n')

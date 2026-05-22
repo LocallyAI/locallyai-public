@@ -160,7 +160,7 @@ def main() -> None:
         print(f"  {YELLOW}From the production folder root, re-ingest using the venv's python:{RESET}")
         print(f"  {YELLOW}    .venv/bin/python ingest.py --force{RESET}")
         print(f"  {YELLOW}If 'sources_retrieved=0' on every query, the embedding backend isn't")
-        print(f"  responding. Check the right thing for your backend:")
+        print("  responding. Check the right thing for your backend:")
         backend_hints = {
             "mlx":      "EMBED_BACKEND=local — verify sentence-transformers can load nomic-ai/nomic-embed-text-v1.5",
             "ollama":   "curl -s http://localhost:11434/api/tags",

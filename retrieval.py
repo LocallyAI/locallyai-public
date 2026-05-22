@@ -7,15 +7,14 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import time
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import Filter, FieldCondition, MatchValue
+from qdrant_client.http.models import FieldCondition, Filter, MatchValue
 
 from bm25 import BM25Index  # local module
 
@@ -251,8 +250,8 @@ class HybridRetrievalEngine:
 # Module-level singleton with mtime-based cache invalidation
 # ---------------------------------------------------------------------------
 
-_retriever: Optional[HybridRetriever] = None
-_bm25:      Optional[BM25Index]       = None
+_retriever: HybridRetriever | None = None
+_bm25:      BM25Index | None       = None
 _bm25_mtime: float                    = 0.0
 
 # Last-call retrieve timings (dense_ms, bm25_ms, rrf_ms, acl_ms,
@@ -268,9 +267,9 @@ def get_last_retrieve_timings() -> dict:
     return dict(_last_retrieve_timings)
 
 
-def _get_retriever() -> Optional[HybridRetriever]:
+def _get_retriever() -> HybridRetriever | None:
     global _retriever, _bm25, _bm25_mtime
-    from config import STORAGE_DIR, COLLECTION_NAME, TOP_K
+    from config import COLLECTION_NAME, STORAGE_DIR, TOP_K
     bm25_path = Path(str(STORAGE_DIR)) / "bm25_index.json"
     if not bm25_path.exists():
         return None
@@ -287,10 +286,11 @@ def _get_retriever() -> Optional[HybridRetriever]:
     return _retriever
 
 
-def _embed_query(query: str) -> Optional[list[float]]:
+def _embed_query(query: str) -> list[float] | None:
     """In-process model (EMBED_BACKEND=local) or OpenAI-compatible HTTP."""
     import os as _os
-    from config import LLM_BASE_URL, EMBED_MODEL
+
+    from config import EMBED_MODEL, LLM_BASE_URL
     # In-process path: no HTTP server required
     if _os.environ.get("EMBED_BACKEND", "http").lower() == "local":
         try:

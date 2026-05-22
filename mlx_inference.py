@@ -15,8 +15,12 @@ funnel ALL MLX work (load + every generate call) through a single
 dedicated worker thread. The worker is started lazily on first use.
 """
 from __future__ import annotations
-import os, threading, queue, logging
-from typing import Iterator, Optional
+
+import logging
+import os
+import queue
+import threading
+from typing import Iterator
 
 log = logging.getLogger("mlx_inference")
 
@@ -26,8 +30,8 @@ _lock      = threading.Lock()
 
 # Single dedicated MLX worker thread + a job queue. All MLX calls (load
 # and generate) run on this thread so GPU streams stay valid.
-_mlx_queue: "queue.Queue[tuple]" = queue.Queue()
-_mlx_thread: Optional[threading.Thread] = None
+_mlx_queue: queue.Queue[tuple] = queue.Queue()
+_mlx_thread: threading.Thread | None = None
 _mlx_thread_lock = threading.Lock()
 
 
@@ -53,7 +57,7 @@ def _run_on_mlx_thread(fn, *args, **kwargs):
     """Submit fn to the MLX worker thread, block for the result, re-raise
     any exception on the caller's thread."""
     _ensure_worker()
-    result_q: "queue.Queue[tuple]" = queue.Queue(maxsize=1)
+    result_q: queue.Queue[tuple] = queue.Queue(maxsize=1)
     _mlx_queue.put((fn, args, kwargs, result_q))
     status, payload = result_q.get()
     if status == "err":
@@ -127,7 +131,7 @@ def _read_pin(model_id: str) -> str | None:
         return None
     try:
         section = None
-        with open(_PIN_FILE, "r", encoding="utf-8") as f:
+        with open(_PIN_FILE, encoding="utf-8") as f:
             for line in f:
                 s = line.strip()
                 if not s or s.startswith("#"):
@@ -160,13 +164,13 @@ def _resolve_commit(model_id: str) -> str | None:
         )
         ref = os.path.join(repo_dir, "refs", "main")
         if os.path.isfile(ref):
-            with open(ref, "r", encoding="utf-8") as f:
+            with open(ref, encoding="utf-8") as f:
                 return f.read().strip()
     except OSError:
         pass
     return None
 
-def _ensure_loaded_sync(model_id: Optional[str] = None):
+def _ensure_loaded_sync(model_id: str | None = None):
     global _model, _tokenizer
     target = model_id or DEFAULT_MODEL
     with _lock:
@@ -174,16 +178,16 @@ def _ensure_loaded_sync(model_id: Optional[str] = None):
             _load_model(target)
 
 
-def ensure_loaded(model_id: Optional[str] = None):
+def ensure_loaded(model_id: str | None = None):
     """Public entry point. Loads on the dedicated MLX worker thread so
     streams and the model are owned by the same thread."""
     _run_on_mlx_thread(_ensure_loaded_sync, model_id)
 
 
-def _generate_sync(messages, model: Optional[str], max_tokens: int, temperature: float):
+def _generate_sync(messages, model: str | None, max_tokens: int, temperature: float):
     _ensure_loaded_sync(model)
     from mlx_lm import generate as mlx_generate
-    from mlx_lm.sample_utils import make_sampler, make_logits_processors
+    from mlx_lm.sample_utils import make_logits_processors, make_sampler
 
     if isinstance(messages, str):
         messages = [{"role": "user", "content": messages}]
@@ -205,8 +209,8 @@ def _generate_sync(messages, model: Optional[str], max_tokens: int, temperature:
     )
 
 
-def _stream_pump_sync(messages, model: Optional[str], max_tokens: int,
-                      temperature: float, out_q: "queue.Queue",
+def _stream_pump_sync(messages, model: str | None, max_tokens: int,
+                      temperature: float, out_q: queue.Queue,
                       abort_event: threading.Event):
     """Run streaming generation on the MLX worker thread, pushing each
     token onto out_q as it is produced. Pushes the sentinel `("done",
@@ -227,7 +231,7 @@ def _stream_pump_sync(messages, model: Optional[str], max_tokens: int,
     """
     _ensure_loaded_sync(model)
     from mlx_lm import stream_generate
-    from mlx_lm.sample_utils import make_sampler, make_logits_processors
+    from mlx_lm.sample_utils import make_logits_processors, make_sampler
 
     if isinstance(messages, str):
         messages = [{"role": "user", "content": messages}]
@@ -277,7 +281,7 @@ def _stream_pump_sync(messages, model: Optional[str], max_tokens: int,
                 pass
 
 
-def stream(messages, model: Optional[str] = None,
+def stream(messages, model: str | None = None,
            max_tokens: int = 2048, temperature: float = 0.1) -> Iterator[str]:
     """Token-by-token generator. Internally schedules a job on the MLX
     worker thread that pushes tokens onto a queue; this generator pumps
@@ -293,7 +297,7 @@ def stream(messages, model: Optional[str] = None,
     contract a closed consumer wedges the worker thread on a full
     out_q.put() call.
     """
-    out_q: "queue.Queue" = queue.Queue(maxsize=64)
+    out_q: queue.Queue = queue.Queue(maxsize=64)
     abort_event = threading.Event()
 
     _ensure_worker()
@@ -326,7 +330,7 @@ def stream(messages, model: Optional[str] = None,
                 break
 
 
-def generate(messages, model: Optional[str] = None, stream: bool = False,
+def generate(messages, model: str | None = None, stream: bool = False,
              max_tokens: int = 2048, temperature: float = 0.1) -> str | Iterator[str]:
     """`messages` is the OpenAI-style chat list (system / user / assistant).
     A bare string is still accepted for backwards compatibility with old

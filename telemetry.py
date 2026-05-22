@@ -49,11 +49,9 @@ import shutil
 import socket
 import threading
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 from collections import defaultdict
-from typing import Optional
-
 
 log = logging.getLogger("telemetry")
 
@@ -224,7 +222,7 @@ def _gather_snapshot() -> dict:
     }
     # Static-ish identifiers
     try:
-        from config import NODE_ID, DATA_REGION
+        from config import DATA_REGION, NODE_ID
         snapshot["node_id"]     = NODE_ID
         snapshot["region"]      = DATA_REGION
     except Exception:
@@ -286,13 +284,12 @@ def _gather_snapshot() -> dict:
     # SOP. Default is on (legitimate-interest basis: vendor uses these
     # signals to detect declining engagement and intervene proactively).
     if os.environ.get("LOCALLYAI_TELEMETRY_USAGE", "on").lower() != "off":
-        try:
-            churn = _compute_churn_aggregates()
-            snapshot["queries_24h"]            = churn["queries_24h"]
-            snapshot["unique_users_7d"]        = churn["unique_users_7d"]
-            snapshot["days_since_last_query"]  = churn["days_since_last_query"]
-        except Exception as exc:
-            log.warning(f"churn aggregates failed (non-fatal): {exc}")
+        # TODO (sitting-5): implement _compute_churn_aggregates() reading
+        # the audit log for queries_24h / unique_users_7d /
+        # days_since_last_query. The call site was wired in but the
+        # function itself was never written — the prior try/except
+        # block silently masked the NameError on every heartbeat.
+        pass
 
     # Round-2 A5 / per-firm allowlist. The DPA template promises firms
     # they can request a partial-field heartbeat (e.g. exclude
@@ -459,7 +456,7 @@ def _post_immediate_alert() -> None:
 
 
 # ── Heartbeat loop ──────────────────────────────────────────────────────────
-_heartbeat_thread: Optional[threading.Thread] = None
+_heartbeat_thread: threading.Thread | None = None
 
 
 def start() -> None:

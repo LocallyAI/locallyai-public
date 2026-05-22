@@ -165,7 +165,7 @@ def _kill_stale_listeners() -> None:
     (AirPlay on macOS, IIS on Windows, etc.) and aborts the supervisor in
     that case so the operator notices and clears the port deliberately.
     """
-    from os_supervisor import find_listener_pids, cmdline_of, IS_WINDOWS
+    from os_supervisor import IS_WINDOWS, cmdline_of, find_listener_pids
 
     pids = find_listener_pids(PORT)
     me = os.getpid()
@@ -279,7 +279,7 @@ def _verify_bound(api_proc: subprocess.Popen, timeout: int = 15) -> bool:
     and api_proc.poll() would return non-None (caught at the top of the
     loop).
     """
-    from os_supervisor import find_listener_pids, IS_WINDOWS
+    from os_supervisor import IS_WINDOWS, find_listener_pids
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if api_proc.poll() is not None:

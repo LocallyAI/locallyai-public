@@ -18,7 +18,10 @@ Lock is advisory — every writer must use this helper. Single-node
 deployments still benefit (sentinel rotation vs subprocess writes).
 """
 from __future__ import annotations
-import os, time, errno
+
+import errno
+import os
+import time
 from contextlib import contextmanager
 from pathlib import Path
 

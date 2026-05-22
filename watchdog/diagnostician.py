@@ -1,15 +1,14 @@
 ﻿# Agent 4: Diagnostician — crash signature matching + autonomous remediation
 import json
-import logging
 import os
 import re
 import subprocess
 import sys
 import time
-import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Depends
+
+from fastapi import APIRouter, Depends, HTTPException
 
 # Ensure repo root is importable for the shared auth helper.
 _BASE = Path(__file__).resolve().parent.parent
@@ -29,7 +28,7 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 _auth = admin_auth_dep()
 
 def _log(event: str, detail: str = ""):
-    entry = {"timestamp": datetime.now(timezone.utc).isoformat(),
+    entry = {"timestamp": datetime.now(UTC).isoformat(),
              "event": event, "detail": detail}
     with open(DIAG_LOG, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
@@ -170,7 +169,7 @@ def analyse(body: dict, key: str = Depends(_auth)):
             "suggestion": suggestion,
             "error_preview": error_text[:500],
             "status": "pending_approval",
-            "created_at": datetime.now(timezone.utc).isoformat()
+            "created_at": datetime.now(UTC).isoformat()
         })
         _save_pending(pending)
         _log("queued_for_approval", f"{match['code']} id={fix_id}")
@@ -192,7 +191,7 @@ def approve_fix(fix_id: str, key: str = Depends(_auth)):
     if not item:
         raise HTTPException(status_code=404, detail="Fix ID not found")
     item["status"]      = "approved"
-    item["approved_at"] = datetime.now(timezone.utc).isoformat()
+    item["approved_at"] = datetime.now(UTC).isoformat()
     _save_pending(items)
     _log("fix_approved", fix_id)
     return {"approved": True, "fix_id": fix_id, "suggestion": item["suggestion"],

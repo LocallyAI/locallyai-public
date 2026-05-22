@@ -54,10 +54,9 @@ import os
 import re
 import shutil
 import subprocess
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
+from datetime import UTC
 from pathlib import Path
-from typing import Optional
-
 
 log = logging.getLogger("system_updates")
 
@@ -90,7 +89,7 @@ SIGNING_KEY_PATH = REPO_DIR / "docs" / "release-signing-key.gpg"
 _PINNED_FP_OVERRIDE = os.environ.get("LOCALLYAI_RELEASE_KEY_FP", "").strip().upper().replace(" ", "")
 
 
-def _extract_pinned_fingerprint() -> Optional[str]:
+def _extract_pinned_fingerprint() -> str | None:
     """Read the trusted fingerprint from docs/release-signing-key.gpg.
     Runs `gpg --show-keys --with-colons` against the key file (does NOT
     import; pure parse). Returns the full 40-char fingerprint string,
@@ -127,7 +126,7 @@ def _extract_pinned_fingerprint() -> Optional[str]:
     return None
 
 
-_PINNED_FINGERPRINT: Optional[str] = None  # lazy-resolved on first verify
+_PINNED_FINGERPRINT: str | None = None  # lazy-resolved on first verify
 
 # Soak window for the dev → stable promotion. Firms reject any -stable
 # tag whose released_at is younger than this (defends against vendor
@@ -267,7 +266,7 @@ def verify_tag_signature(tag: str) -> tuple[bool, str]:
 
 
 # ── Manifest verification ───────────────────────────────────────────────────
-def _read_manifest_at_tag(tag: str) -> Optional[ReleaseManifest]:
+def _read_manifest_at_tag(tag: str) -> ReleaseManifest | None:
     """Pull release_manifest.json from the local git tag."""
     try:
         r = subprocess.run(
@@ -353,9 +352,9 @@ def _passes_soak(manifest: ReleaseManifest) -> tuple[bool, str]:
     if manifest.channel != "stable":
         return True, ""
     try:
-        from datetime import datetime, timezone
+        from datetime import datetime
         released = datetime.fromisoformat(manifest.released_at.replace("Z", "+00:00"))
-        age_hr = (datetime.now(timezone.utc) - released).total_seconds() / 3600
+        age_hr = (datetime.now(UTC) - released).total_seconds() / 3600
         if age_hr < DEV_SOAK_HOURS:
             return False, f"in soak window ({age_hr:.1f}h elapsed, {DEV_SOAK_HOURS}h required)"
         return True, f"{age_hr:.0f}h since release (soak satisfied)"

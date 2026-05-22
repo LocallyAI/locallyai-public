@@ -32,8 +32,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
-
 
 log = logging.getLogger("ingest_queue")
 
@@ -51,7 +49,7 @@ class QueueStatus:
     queued: int
     completed_total: int
     failed_total: int
-    last_completed_at: Optional[float]
+    last_completed_at: float | None
     bm25_pending: bool
 
 
@@ -66,7 +64,7 @@ class IngestQueue:
         self._queued = 0
         self._completed = 0
         self._failed = 0
-        self._last_completed_at: Optional[float] = None
+        self._last_completed_at: float | None = None
         self._last_event_at: float = time.time()
         self._bm25_pending = False
         self._stop = threading.Event()
@@ -131,7 +129,7 @@ class IngestQueue:
     def _index_one(self, job: IngestJob) -> None:
         # Local imports keep the module importable without the full app stack.
         from config import make_qdrant_client
-        from ingest import ingest_file, ensure_collection, file_hash, load_state, save_state
+        from ingest import ensure_collection, file_hash, ingest_file, load_state, save_state
 
         client = make_qdrant_client()
         ensure_collection(client)
@@ -174,7 +172,7 @@ class IngestQueue:
 
 
 # Process-wide singleton. Built lazily so the import has no side effects.
-_singleton: Optional[IngestQueue] = None
+_singleton: IngestQueue | None = None
 _singleton_lock = threading.Lock()
 
 

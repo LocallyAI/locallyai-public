@@ -15,7 +15,11 @@ The Windows ACL story:
   install.sh achieves on macOS via mode 0o600 + FileVault.
 """
 from __future__ import annotations
-import os, subprocess, getpass, logging
+
+import getpass
+import logging
+import os
+import subprocess
 from pathlib import Path
 
 _log = logging.getLogger("platform_compat")

@@ -23,10 +23,9 @@ from __future__ import annotations
 
 import os
 import sqlite3
-import time
 import threading
+import time
 from pathlib import Path
-
 
 _LOG_DIR = Path(os.environ.get("LOCALLYAI_LOG_DIR", "")) if os.environ.get("LOCALLYAI_LOG_DIR") else Path(__file__).resolve().parent / "logs"
 _LOG_DIR.mkdir(parents=True, exist_ok=True)

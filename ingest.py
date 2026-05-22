@@ -2,23 +2,31 @@ import hashlib
 import json
 import logging
 import os
-import re
-import struct
 import sys
 import zlib
 from pathlib import Path
-from typing import Optional
 
 import requests
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from config import (
-    CHUNK_OVERLAP, CHUNK_SIZE, COLLECTION_NAME, DATA_DIR,
-    EMBED_MODEL, INGEST_STATE, LOG_DIR, OLLAMA_BASE_URL, LLM_BASE_URL,
-    STORAGE_DIR, SUPPORTED_EXTENSIONS, VECTOR_SIZE,
-    EXPAND_QUERIES, RERANKER_MODEL, TOP_K, CANDIDATE_POOL,
+    CANDIDATE_POOL,
+    CHUNK_OVERLAP,
+    CHUNK_SIZE,
+    COLLECTION_NAME,
+    DATA_DIR,
+    EMBED_MODEL,
+    EXPAND_QUERIES,
+    INGEST_STATE,
+    LLM_BASE_URL,
     LLM_MODEL,
+    LOG_DIR,
+    OLLAMA_BASE_URL,
+    STORAGE_DIR,
+    SUPPORTED_EXTENSIONS,
+    TOP_K,
+    VECTOR_SIZE,
 )
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -142,7 +150,7 @@ def chunk_text(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) 
 
 
 # Embedding
-def embed(text: str) -> Optional[list[float]]:
+def embed(text: str) -> list[float] | None:
     """Embeddings via in-process model (EMBED_BACKEND=local) or OpenAI-compatible
     HTTP server (default). Local mode bypasses Ollama / LM Studio entirely and
     runs sentence-transformers on PyTorch's MPS backend (Apple Silicon)."""

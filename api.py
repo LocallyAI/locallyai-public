@@ -4,9 +4,11 @@ Backend auto-selects via LOCALLYAI_BACKEND env var:
   mlx    -> Apple Silicon (MLX-LM, Metal)
   ollama -> any machine with Ollama running (default)
 """
-from dotenv import load_dotenv
 import os
 from pathlib import Path
+
+from dotenv import load_dotenv
+
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 import hashlib
@@ -15,30 +17,45 @@ import json
 import logging
 import time
 import uuid as _uuid
-from collections import defaultdict
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File, BackgroundTasks
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse, FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
-from config import USERS, validate_key, reload_users, pseudonymise_user, BILLING_LOG, STORAGE_DIR, COLLECTION_NAME, LLM_MODEL, LLM_BASE_URL, NODE_ID as _NODE_ID, BASE_DIR
-from ingest import ingest_file, ensure_collection, rebuild_bm25, file_hash, load_state, save_state
 from audit_export.audit_export import router as audit_router
-from monitoring.monitor import router as monitor_router
 from billing.metering import router as billing_router
-from watchdog.diagnostician import router as diagnostician_router
+from config import (
+    BASE_DIR,
+    BILLING_LOG,
+    COLLECTION_NAME,
+    LLM_BASE_URL,
+    LLM_MODEL,
+    pseudonymise_user,
+    reload_users,
+    validate_key,
+)
+from config import NODE_ID as _NODE_ID
+from ingest import ensure_collection
 from manage_users import (
     add_user as _add_user,
-    remove_user as _remove_user,
-    rotate_key as _rotate_key,
+)
+from manage_users import (
     list_users as _list_users,
 )
+from manage_users import (
+    remove_user as _remove_user,
+)
+from manage_users import (
+    rotate_key as _rotate_key,
+)
+from monitoring.monitor import router as monitor_router
+from watchdog.diagnostician import router as diagnostician_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("api")
@@ -116,6 +133,7 @@ app.include_router(billing_router)
 app.include_router(diagnostician_router)
 
 from watchdog import sentinel as _sentinel_mod
+
 _sentinel_mod.start()
 
 
@@ -265,6 +283,7 @@ def branding(request: Request):
     if not is_loopback and origin not in _ALLOWED_ORIGINS:
         raise HTTPException(status_code=403, detail="Origin not allowed")
     import socket as _socket
+
     from config import DATA_REGION as _DATA_REGION
     firm_name = os.environ.get("LOCALLYAI_FIRM_NAME", "").strip()
     if not firm_name:
@@ -334,7 +353,7 @@ def _auth(request: Request, creds: HTTPAuthorizationCredentials = Depends(securi
         # Don't silently 429 — the breach detector wants every attempt
         # *during* a lockout window so it can see sustained probing.
         _write_security_log("auth_locked_attempt", ip,
-                            f"Request rejected during lockout window",
+                            "Request rejected during lockout window",
                             path=path, key_fp=key_fp)
         raise HTTPException(status_code=429, detail="Too many failed attempts. Try again later.")
     user = validate_key(creds.credentials)
@@ -354,12 +373,12 @@ class Message(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    model: Optional[str] = None
+    model: str | None = None
     messages: list[Message]
-    stream: Optional[bool] = False
-    max_tokens: Optional[int] = 2048
-    temperature: Optional[float] = 0.1
-    matter_code: Optional[str] = Field(
+    stream: bool | None = False
+    max_tokens: int | None = 2048
+    temperature: float | None = 0.1
+    matter_code: str | None = Field(
         None,
         description="Law firm matter/file reference for audit and billing attribution",
         max_length=64,
@@ -371,7 +390,7 @@ class ChatRequest(BaseModel):
     # node's per-node dedup cache returns the cached result without a
     # second inference, audit entry, or billing entry. Constrained to a
     # safe character set so it can be logged without escaping concerns.
-    client_request_id: Optional[str] = Field(
+    client_request_id: str | None = Field(
         None,
         max_length=64,
         pattern=r"^[A-Za-z0-9\-_]{1,64}$",
@@ -380,7 +399,7 @@ class ChatRequest(BaseModel):
 
 
 # ── Inference backends ────────────────────────────────────────────────────────
-def _infer(messages: list[dict], model: Optional[str], stream: bool, max_tokens: int, temperature: float):
+def _infer(messages: list[dict], model: str | None, stream: bool, max_tokens: int, temperature: float):
     if BACKEND == "mlx":
         from mlx_inference import generate
         return generate(messages, model, stream, max_tokens, temperature)
@@ -407,7 +426,7 @@ def _infer(messages: list[dict], model: Optional[str], stream: bool, max_tokens:
     return data.get("choices", [{}])[0].get("message", {}).get("content", "")
 
 
-def _stream_ollama(messages: list[dict], model: Optional[str], max_tokens: int,
+def _stream_ollama(messages: list[dict], model: str | None, max_tokens: int,
                    temperature: float):
     """Generator that yields text deltas from an OpenAI-compatible upstream
     (Ollama, LM Studio, vLLM, etc.) when stream=true. Each upstream SSE
@@ -601,7 +620,7 @@ def _write_audit(user: str, model: str, sources: int, latency_ms: float,
     # subject-access request finding an old entry can pick the right salt
     # for re-identification (GDPR Art. 15 / Art. 32 documented control
     # for cryptographic key rotation; ISO 27001 A.8.24).
-    from config import current_salt_era, DATA_REGION
+    from config import DATA_REGION, current_salt_era
     entry = {
         "timestamp":   ts,
         "node_id":     _NODE_ID,
@@ -984,7 +1003,7 @@ def chat(request: Request, req: ChatRequest, user: str = Depends(_auth)):
                                       req.temperature or 0.1)
 
         def _sse_iter():
-            from inference_gate import slot, GateBusy
+            from inference_gate import GateBusy, slot
             # Acquire a concurrency slot BEFORE we start emitting tokens
             # and hold it until the model is done. Without this gate, N
             # simultaneous streaming users would all pin model contexts
@@ -1065,7 +1084,7 @@ def chat(request: Request, req: ChatRequest, user: str = Depends(_auth)):
     # call _infer simultaneously and the host OOMs. With it, request
     # N+1 waits up to 30s for a slot, or returns 503 with Retry-After
     # so the smart client retries on a peer.
-    from inference_gate import slot, GateBusy
+    from inference_gate import GateBusy, slot
     try:
         with slot(timeout=30.0):
             try:
@@ -1144,6 +1163,8 @@ _UPLOAD_DIR       = Path(__file__).resolve().parent / "storage" / "uploads"
 _UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 _ALLOWED_EXTS     = {".pdf", ".txt", ".md", ".docx"}
+
+from datetime import UTC
 
 import chunked_uploads as _cu
 from ingest_queue import get_queue as _get_ingest_queue
@@ -1266,8 +1287,8 @@ def delete_document(display_name: str, request: Request, key: str = Depends(_adm
     exact name, or (b) finding a file in storage/uploads/ whose
     name ends with "_<display_name>" after the UUID prefix.
     """
-    from pathlib import Path
     import re as _re
+    from pathlib import Path
     base = Path(__file__).resolve().parent
 
     # Path-traversal hardening — same logic as upload validation.
@@ -1281,8 +1302,8 @@ def delete_document(display_name: str, request: Request, key: str = Depends(_adm
     # over data/ (seed) because operators usually want to remove
     # client-uploaded material, not the demo set.
     uuid_re = _re.compile(r"^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}_")
-    on_disk: Optional[Path] = None
-    source_key: Optional[str] = None  # the value stored in Qdrant payload.source
+    on_disk: Path | None = None
+    source_key: str | None = None  # the value stored in Qdrant payload.source
 
     uploads_dir = base / "storage" / "uploads"
     if uploads_dir.exists():
@@ -1317,8 +1338,9 @@ def delete_document(display_name: str, request: Request, key: str = Depends(_adm
     #    doc had 1 chunk or 10 000.
     qdrant_dropped = 0
     try:
+        from qdrant_client.models import FieldCondition, Filter, FilterSelector, MatchValue
+
         from config import make_qdrant_client
-        from qdrant_client.models import Filter, FieldCondition, MatchValue, FilterSelector
         client = make_qdrant_client()
         flt = Filter(must=[FieldCondition(key="source", match=MatchValue(value=source_key))])
         # Count first so we can audit-log how much was removed.
@@ -1366,7 +1388,7 @@ def delete_document(display_name: str, request: Request, key: str = Depends(_adm
     #    deletion. Mirrors the chain-write pattern manage_users uses
     #    for admin_key_rotation — system event, no user_hash field.
     try:
-        from config import current_salt_era, DATA_REGION
+        from config import DATA_REGION, current_salt_era
         ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         admin_entry = {
             "timestamp":             ts,
@@ -1475,7 +1497,8 @@ def set_document_acl(display_name: str, req: _AclSetReq, request: Request,
 @limiter.limit("30/minute")
 def delete_document_acl(display_name: str, request: Request, key: str = Depends(_admin_auth)):
     """Remove the explicit ACL — document falls back to default policy."""
-    from doc_acls import delete_acl as _delete_acl, get_acl as _get_acl
+    from doc_acls import delete_acl as _delete_acl
+    from doc_acls import get_acl as _get_acl
     removed = _delete_acl(display_name)
     if removed:
         # Reset chunk payloads to the default policy
@@ -1495,8 +1518,9 @@ def _update_chunk_acl_payloads(display_name: str, acl_entry: dict) -> int:
     and the post-filter in retrieval.py would still apply the policy."""
     try:
         from qdrant_client import QdrantClient
-        from qdrant_client.models import Filter, FieldCondition, MatchValue
-        from config import COLLECTION_NAME, STORAGE_DIR, QDRANT_URL
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+        from config import COLLECTION_NAME, QDRANT_URL, STORAGE_DIR
         client = QdrantClient(url=QDRANT_URL) if QDRANT_URL else QdrantClient(path=str(STORAGE_DIR))
         flt = Filter(must=[FieldCondition(key="source", match=MatchValue(value=display_name))])
         # Count chunks that match (single scroll pass; we don't need the data)
@@ -1543,7 +1567,7 @@ class _ConflictCheckReq(BaseModel):
     parties:          list[_ConflictParty] = Field(..., min_length=1, max_length=20)
     description:      str = Field(default="", max_length=2000)
     opposing_counsel: list[str] = Field(default_factory=list, max_length=20)
-    matter_id:        Optional[str] = Field(default=None, max_length=64)
+    matter_id:        str | None = Field(default=None, max_length=64)
 
 
 @app.post("/v1/conflicts/check")
@@ -1594,12 +1618,12 @@ _COMPARE_MAX_BYTES = 200 * 1024  # 200 KB per side
 
 
 class _CompareReq(BaseModel):
-    doc_a:   Optional[str] = Field(default=None, max_length=512)
-    doc_b:   Optional[str] = Field(default=None, max_length=512)
-    text_a:  Optional[str] = None
-    text_b:  Optional[str] = None
-    label_a: Optional[str] = Field(default=None, max_length=200)
-    label_b: Optional[str] = Field(default=None, max_length=200)
+    doc_a:   str | None = Field(default=None, max_length=512)
+    doc_b:   str | None = Field(default=None, max_length=512)
+    text_a:  str | None = None
+    text_b:  str | None = None
+    label_a: str | None = Field(default=None, max_length=200)
+    label_b: str | None = Field(default=None, max_length=200)
 
 
 def _read_doc_text_for_compare(display_name: str, user: str) -> tuple[str, str]:
@@ -1731,8 +1755,8 @@ def _resolve_doc_on_disk(display_name: str) -> Optional["Path"]:
     source field straight through, so we need to find a file under
     either convention. Returns None if not found.
     """
-    from pathlib import Path
     import re as _re
+    from pathlib import Path
     base = Path(__file__).resolve().parent
     safe = Path(display_name).name
     if not safe or safe in (".", "..") or "/" in safe or "\\" in safe:
@@ -1826,11 +1850,11 @@ def get_document_raw(display_name: str, request: Request, user: str = Depends(_a
 class _UploadInitReq(BaseModel):
     filename:    str   = Field(..., min_length=1, max_length=512)
     total_bytes: int   = Field(..., ge=1)
-    sha256:      Optional[str] = Field(default=None, description="64-hex; verified on complete")
+    sha256:      str | None = Field(default=None, description="64-hex; verified on complete")
 
 
 class _UploadCompleteReq(BaseModel):
-    sha256: Optional[str] = Field(default=None)
+    sha256: str | None = Field(default=None)
 
 
 def _cu_err(exc: "_cu.UploadError") -> HTTPException:
@@ -2072,7 +2096,7 @@ def processing_record(key: str = Depends(_admin_auth)):
     # ISO 27001 A.8.24, UAE PDPL art. 8(2), KSA PDPL art. 19). Surfaced
     # so a DPO sees the live posture and can act on warns.
     try:
-        from config import verify_key_material, current_salt_era, known_salt_eras
+        from config import current_salt_era, known_salt_eras, verify_key_material
         key_findings = verify_key_material()
         pseudonymity = {
             "current_salt_era":   current_salt_era(),
@@ -2353,7 +2377,7 @@ def _compliance_erasure_summary() -> dict:
     from config import ERASURE_LOG
     if not ERASURE_LOG.exists():
         return {"total_erasures": 0, "last_5": []}
-    from audit_reader import iter_filtered, count_lines
+    from audit_reader import count_lines, iter_filtered
     total = count_lines(ERASURE_LOG)
     # Take the last 5 erasure events. iter_filtered streams the whole file —
     # acceptable here because erasure.log is ledger-paced, not query-paced.
@@ -2388,10 +2412,11 @@ def _compliance_incident_register(days: int = 90) -> list:
     most-recent first. Auditors following a breach inspection want the
     actual records, not the bucketed counts in `breach_events_30d`.
     """
-    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    from datetime import datetime as _dt
+    from datetime import timedelta as _td
     if not SECURITY_LOG.exists():
         return []
-    cutoff = _dt.now(_tz.utc) - _td(days=days)
+    cutoff = _dt.now(UTC) - _td(days=days)
     from audit_reader import iter_filtered
 
     def _within(e: dict) -> bool:
@@ -2405,7 +2430,7 @@ def _compliance_incident_register(days: int = 90) -> list:
         except Exception:
             return False
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=_tz.utc)
+            ts = ts.replace(tzinfo=UTC)
         return ts >= cutoff
 
     entries = list(iter_filtered(SECURITY_LOG, _within))
@@ -2483,7 +2508,9 @@ def _compliance_dpia(ropa: dict) -> dict:
     cats = ropa.get("categories_of_data", [])
     return {
         "version": "1.0",
-        "generated_at": datetime.now(timezone.utc).isoformat() if False else None,  # filled at snapshot time
+        # Filled in at snapshot time by the caller — see compliance_snapshot()
+        # which overwrites this with the actual generation timestamp.
+        "generated_at": None,
         "regulation": "GDPR Art. 35 / UK DPA 2018 / KSA PDPL Art. 33 / UAE PDPL Art. 22",
         # Section A — context (auto from RoPA)
         "controller": ropa.get("controller", {}),
@@ -2561,10 +2588,11 @@ def _compliance_dpia(ropa: dict) -> dict:
 
 def _compliance_breach_events_30d() -> list:
     """Tail security.log for events in the last 30 days. Bucketed by code+severity."""
-    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    from datetime import datetime as _dt
+    from datetime import timedelta as _td
     if not SECURITY_LOG.exists():
         return []
-    cutoff = _dt.now(_tz.utc) - _td(days=30)
+    cutoff = _dt.now(UTC) - _td(days=30)
     from audit_reader import iter_filtered
 
     def _within_window(e: dict) -> bool:
@@ -2578,7 +2606,7 @@ def _compliance_breach_events_30d() -> list:
         except Exception:
             return False
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=_tz.utc)
+            ts = ts.replace(tzinfo=UTC)
         return ts >= cutoff
 
     buckets: dict = {}
@@ -2617,9 +2645,10 @@ def compliance_snapshot(format: str = "json", key: str = Depends(_admin_auth)):
     that protects the audit chain. Saved copies can be verified offline
     with `scripts/verify_compliance_snapshot.py`.
     """
-    from config import DATA_REGION as _data_region
-    from datetime import datetime as _dt, timezone as _tz
     import hashlib as _hl_compl
+    from datetime import datetime as _dt
+
+    from config import DATA_REGION as _data_region
     try:
         with open(BASE_DIR / "release_manifest.json", encoding="utf-8") as _mf:
             _release_version = json.load(_mf).get("version", "unknown")
@@ -2637,10 +2666,10 @@ def compliance_snapshot(format: str = "json", key: str = Depends(_admin_auth)):
 
     ropa = processing_record(key=key)
     dpia = _compliance_dpia(ropa)
-    dpia["generated_at"] = _dt.now(_tz.utc).isoformat()
+    dpia["generated_at"] = _dt.now(UTC).isoformat()
     bundle = {
         "version": "1.1",
-        "generated_at": _dt.now(_tz.utc).isoformat(),
+        "generated_at": _dt.now(UTC).isoformat(),
         "deployment": deployment,
         "ropa": ropa,
         "dpia": dpia,
@@ -2977,7 +3006,7 @@ def list_training_records(key: str = Depends(_admin_auth)):
 
 @app.post("/admin/training-records")
 def add_training_record(body: dict, key: str = Depends(_admin_auth)):
-    from datetime import datetime as _dt, timezone as _tz
+    from datetime import datetime as _dt
     user = (body.get("user") or "").strip()
     topic = (body.get("topic") or "").strip()
     notes = (body.get("notes") or "").strip()
@@ -2985,7 +3014,7 @@ def add_training_record(body: dict, key: str = Depends(_admin_auth)):
     if not user or not topic:
         raise HTTPException(status_code=400, detail="user and topic are required")
     if not completed_at:
-        completed_at = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        completed_at = _dt.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     records = _load_training_records()
     next_id = (max((r.get("id", 0) for r in records), default=0)) + 1
     record = {"id": next_id, "user": user, "topic": topic,
@@ -3037,7 +3066,7 @@ def list_backup_attestations(key: str = Depends(_admin_auth)):
 
 @app.post("/admin/backup-attestations")
 def add_backup_attestation(body: dict, key: str = Depends(_admin_auth)):
-    from datetime import datetime as _dt, timezone as _tz
+    from datetime import datetime as _dt
     test_type = (body.get("test_type") or "").strip()  # e.g. "full restore", "partial", "smoke"
     result = (body.get("result") or "").strip()  # "passed" | "failed" | "partial"
     notes = (body.get("notes") or "").strip()
@@ -3046,7 +3075,7 @@ def add_backup_attestation(body: dict, key: str = Depends(_admin_auth)):
     if not test_type or not result:
         raise HTTPException(status_code=400, detail="test_type and result are required")
     if not tested_at:
-        tested_at = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        tested_at = _dt.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     records = _load_backup_attestations()
     next_id = (max((r.get("id", 0) for r in records), default=0)) + 1
     record = {"id": next_id, "test_type": test_type, "result": result,
@@ -3073,8 +3102,11 @@ def fleet_nodes(key: str = Depends(_admin_auth)):
 def fleet_alerts(request: Request, key: str = Depends(_admin_auth)):
     """Aggregate monitor alerts from every active node so the dashboard
     can show fleet-wide alert state in one call."""
+    import ssl
+    import urllib.error
+    import urllib.request
+
     import fleet as _fleet
-    import urllib.request, urllib.error, ssl
     auth_header = request.headers.get("authorization", "")
     nodes = _fleet.active_nodes() or []
     ssl_ctx = ssl.create_default_context()
@@ -3134,8 +3166,10 @@ def fleet_qdrant_health(key: str = Depends(_admin_auth)):
     Single-node deployments (no QDRANT_URLS, embedded store) cleanly
     return mode:"single-node" — never errors.
     """
-    from config import QDRANT_URLS, QDRANT_URL, QDRANT_API_KEY
-    import urllib.request, urllib.error
+    import urllib.error
+    import urllib.request
+
+    from config import QDRANT_API_KEY, QDRANT_URL, QDRANT_URLS
     if not QDRANT_URLS and not QDRANT_URL:
         return {"node_id": _NODE_ID, "mode": "single-node",
                 "reason": "QDRANT_URLS/QDRANT_URL unset; using embedded store"}
@@ -3166,9 +3200,12 @@ def fleet_gate(request: Request, key: str = Depends(_admin_auth)):
     """Per-node inference-gate snapshot: max_inflight, in_flight, queued,
     peak_queue, total_admitted, total_rejected. Fan-out aggregates so
     the dashboard can show fleet-wide load."""
+    import ssl
+    import urllib.error
+    import urllib.request
+
     import fleet as _fleet
     from inference_gate import stats as _gate_stats
-    import urllib.request, urllib.error, ssl
     auth_header = request.headers.get("authorization", "")
     nodes = _fleet.active_nodes() or []
     ssl_ctx = ssl.create_default_context()
@@ -3204,8 +3241,8 @@ def fleet_refresh(key: str = Depends(_admin_auth)):
 
     Idempotent and cheap — a single stat + (if changed) a small JSON
     parse. Safe to call from any peer with a valid admin bearer."""
-    from config import reload_users, _load_erased
     import config as _config
+    from config import _load_erased, reload_users
     reload_users()
     _config._ERASED = _load_erased()
     try:
@@ -3231,8 +3268,11 @@ def fleet_audit_verify(request: Request, key: str = Depends(_admin_auth)):
     calls re-use the bearer token the caller used here; if peer auth
     diverges the per-node entry will report status:"unreachable".
     """
+    import ssl
+    import urllib.error
+    import urllib.request
+
     import fleet as _fleet
-    import urllib.request, urllib.error, ssl
 
     auth_header = request.headers.get("authorization", "")
     nodes = _fleet.active_nodes() or []
@@ -3284,8 +3324,8 @@ def fleet_audit_verify(request: Request, key: str = Depends(_admin_auth)):
 # See system_updates.py + kill_switch.py + deploy.py for the
 # defence-in-depth model: two channels (dev / stable), GPG-signed tags,
 # SHA-256 manifest, OOB kill switch, atomic deploy + rollback.
-import system_updates as _su_mod
 import kill_switch as _ks_mod
+import system_updates as _su_mod
 
 
 @app.get("/admin/updates")
