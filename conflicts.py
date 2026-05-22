@@ -40,11 +40,9 @@ import logging
 import os
 import re
 import time
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Optional
+from datetime import UTC, datetime
 
-from config import SHARED_DIR, _AUDIT_SALT  # type: ignore[attr-defined]
+from config import _AUDIT_SALT, SHARED_DIR  # type: ignore[attr-defined]
 
 log = logging.getLogger("conflicts")
 
@@ -135,7 +133,7 @@ def _corpus_hits(parties: list[str], top_k: int = 20) -> list[dict]:
     sanitisation, or session context — this is a structured backend
     lookup, not a chat turn."""
     try:
-        from retrieval import _get_retriever, _embed_query
+        from retrieval import _embed_query, _get_retriever
     except Exception as exc:
         log.warning(f"retrieval unavailable for conflict check: {exc}")
         return []
@@ -289,7 +287,7 @@ def check(
 
     if not party_names:
         return {"status": "clear", "summary": "No parties supplied; nothing to check.",
-                "hits": [], "llm_assessment": None, "checked_at": datetime.now(timezone.utc).isoformat()}
+                "hits": [], "llm_assessment": None, "checked_at": datetime.now(UTC).isoformat()}
 
     t0 = time.perf_counter()
     raw_hits = _corpus_hits(party_names + opposing_counsel)
@@ -308,7 +306,7 @@ def check(
             {**h, "bucket": "weak"} for h in weak
         ],
         "llm_assessment": llm,
-        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "checked_at": datetime.now(UTC).isoformat(),
         "elapsed_ms": elapsed_ms,
         "matter_id": matter_id,
     }
@@ -381,9 +379,10 @@ def summary_for_compliance() -> dict:
     """Compact summary used by the monthly compliance snapshot."""
     if not _LOG_FILE.exists():
         return {"total": 0, "last_30d": 0, "status_counts": {}}
-    from audit_reader import iter_filtered
     from datetime import timedelta as _td
-    cutoff = (datetime.now(timezone.utc) - _td(days=30)).isoformat()
+
+    from audit_reader import iter_filtered
+    cutoff = (datetime.now(UTC) - _td(days=30)).isoformat()
     total = 0
     last_30 = 0
     status_counts: dict = {}

@@ -6,10 +6,16 @@ Start:    python service.py start   (or net start LocallyAI)
 Stop:     python service.py stop    (or net stop LocallyAI)
 Remove:   python service.py remove
 """
-import sys, os, time
-import win32serviceutil, win32service, win32event, servicemanager
+import os
 import subprocess
+import sys
+import time
 from pathlib import Path
+
+import servicemanager
+import win32event
+import win32service
+import win32serviceutil
 from dotenv import load_dotenv
 
 BASE_DIR   = Path(__file__).resolve().parent

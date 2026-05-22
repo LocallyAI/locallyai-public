@@ -1,0 +1,65 @@
+# Only ruff config lives here for now. No [project] section —
+# LocallyAI ships as a runnable repo (not a pip-installable package),
+# so giving it a [project] would make `pip install -r requirements.txt`
+# accidentally treat the whole repo as a wheel target.
+#
+# When a setup.py / [project] table is added later, keep [tool.ruff]
+# alongside it.
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+    ".venv",
+    "apps/*/node_modules",
+    "apps/*/dist",
+    "apps/clients/*/src-tauri/target",
+    "storage",
+    "logs",
+    "qdrant_storage",
+    "data",
+]
+
+[tool.ruff.lint]
+# Spec's recommended set. The ignore list below captures categories
+# that are either intentional patterns in this codebase or
+# disproportionate-churn bulk rewrites better left to a dedicated
+# cleanup sitting. Each entry has a one-line rationale.
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+    # ── line / formatting ──
+    "E501",   # line too long — line-length is already 100; occasional over-runners OK
+    "E701",   # `if x: return y` and `try: x; except: pass` one-liners are pervasive + readable
+    "E702",   # semicolon-separated statements — same readability story
+
+    # ── intentional patterns ──
+    "E402",   # module-level imports after code — `load_dotenv()` MUST run first; ditto sys.path manipulation
+    "B008",   # function call in default arg — FastAPI's Depends() is the canonical example
+
+    # ── codebase style ──
+    "E741",   # ambiguous variable names (l, I) — present in a few places, low-stakes rename
+    "B904",   # `raise X from err` — many bare re-raises inside `except` are intentional facade wrappers
+    "B905",   # `zip(strict=True)` — adds noise on tested paths
+
+    # ── typing-modernization (bulk rewrites; sitting-5+ work) ──
+    "UP007",  # Optional[X] vs X | None — 60+ occurrences; out-of-scope for CI bootstrap
+    "UP031",  # %-formatting → f-string — single rare occurrence; leave for cleanup sitting
+    "UP035",  # typing → collections.abc import rewrites
+    "UP045",  # Optional[X] in PEP-604 form (covered by UP007)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*"     = ["E501", "F401", "F841"]   # tests sometimes import-or-bind-then-discard
+"scripts/*"   = ["E501"]
+
+[tool.pytest.ini_options]
+# Repo root is on sys.path so tests can `import bm25`, `import api`,
+# etc. Without this, pytest under GitHub Actions discovers tests/
+# but can't resolve the top-level modules (works locally only because
+# the dev venv happens to have the cwd on the path).
+pythonpath = ["."]
+testpaths  = ["tests"]
+# pytest collects test_*.py / *_test.py by default; smoke_e2e.py and
+# ha_chaos.py deliberately don't match so they remain runnable as
+# scripts without showing up in CI.
+

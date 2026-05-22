@@ -1,18 +1,18 @@
 ﻿import json
 import os
 import shutil
-import subprocess
 import sys as _sys
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
 from fastapi import APIRouter, Depends
 
 # Ensure repo root is importable for the audit_reader helper + config.
 _BASE = Path(__file__).resolve().parent.parent
 if str(_BASE) not in _sys.path:
     _sys.path.insert(0, str(_BASE))
-from audit_reader import tail, count_lines, iter_reversed_lines
+from audit_reader import count_lines, iter_reversed_lines, tail
 from auth import admin_auth_dep
 from config import SYSTEM_USER_HASH
 
@@ -86,7 +86,7 @@ def health_detailed(key: str = Depends(_auth)):
     backend_ok, backend_data = _backend_check()
     disk_gb = _disk_free_gb()
     audit = _audit_stats()
-    
+
     # Watchdog agent status
     try:
         from watchdog import sentinel as _sent
@@ -111,7 +111,7 @@ def health_detailed(key: str = Depends(_auth)):
     except Exception as _exc:
         retrieve_timings = {"error": str(_exc)}
     return {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "backend": {"name": _backend(), "reachable": backend_ok, "detail": backend_data},
         "disk_free_gb": disk_gb,
         "audit_log": audit if audit else {"error": "audit.log not found"},
@@ -146,7 +146,7 @@ def alerts(key: str = Depends(_auth)):
         # Round-2 B5: scan from EOF backwards, stop at first entry within
         # the 24h cutoff. Old code preloaded the whole audit.log via
         # read_text().splitlines() and only then reversed.
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+        cutoff = datetime.now(UTC) - timedelta(hours=24)
         recent = False
         for line in iter_reversed_lines(AUDIT_LOG):
             try:
@@ -156,7 +156,7 @@ def alerts(key: str = Depends(_auth)):
                     ts_str = ts_str[:-1] + "+00:00"
                 ts = datetime.fromisoformat(ts_str)
                 if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=timezone.utc)
+                    ts = ts.replace(tzinfo=UTC)
                 if ts > cutoff:
                     recent = True
                     break
@@ -164,7 +164,7 @@ def alerts(key: str = Depends(_auth)):
                 continue
         if not recent:
             result.append({"level": "info", "message": "No queries recorded in the last 24 hours"})
-    
+
     # Merge Sentinel predictive alerts
     try:
         from watchdog.sentinel import get_alerts as _sent_alerts
@@ -176,13 +176,16 @@ def alerts(key: str = Depends(_auth)):
                 overall = "degraded"
     except Exception:
         pass
-    
-    # Watchdog agent status
+
+    # Watchdog agent status. We intentionally invoke `_sent.status()`
+    # for its side effects (warm-up + telemetry), but the return value
+    # is not currently merged into /alerts. Tracked: surface it as
+    # `status.watchdog` alongside the alerts in a later sitting.
     try:
         from watchdog import sentinel as _sent
-        watchdog_status = _sent.status()
-    except Exception as e:
-        watchdog_status = {"error": str(e)}
+        _sent.status()
+    except Exception:
+        pass
     return {"alerts": result, "status": overall}
 
 

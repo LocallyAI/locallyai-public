@@ -20,14 +20,13 @@ Exit codes:
 """
 from __future__ import annotations
 
-import hmac as _hmac
 import hashlib
+import hmac as _hmac
 import json
 import os
 import re
 import sys
 from pathlib import Path
-
 
 _EMBED_RE = re.compile(
     r'<script[^>]+id="locallyai-compliance-snapshot"[^>]*>(.*?)</script>',

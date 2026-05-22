@@ -28,14 +28,14 @@ unchanged — they're just a 1-entry fleet that the dashboard / fan-out
 endpoint short-circuit.
 """
 from __future__ import annotations
-import json, os, time
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Optional
 
-from config import FLEET_FILE, NODE_ID, BASE_DIR
-from shared_lock import shared_lock
+import json
+import time
+from datetime import UTC, datetime
+
+from config import FLEET_FILE, NODE_ID
 from platform_compat import chmod_safe
+from shared_lock import shared_lock
 
 SCHEMA_VERSION = 1
 
@@ -46,7 +46,7 @@ NODE_TTL_SECONDS = 90
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _empty() -> dict:
@@ -145,7 +145,7 @@ def active_nodes() -> list[dict]:
     fresh = []
     for node in data["nodes"].values():
         try:
-            ts = datetime.strptime(node["last_seen"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
+            ts = datetime.strptime(node["last_seen"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC).timestamp()
         except (KeyError, ValueError):
             continue
         if ts >= cutoff:

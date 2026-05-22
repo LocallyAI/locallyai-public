@@ -3,10 +3,10 @@ import json
 import logging
 import os
 import sys as _sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
-from fastapi import APIRouter, HTTPException, Depends, Query
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 # Ensure repo root is importable for the shared auth helper.
 _BASE = Path(__file__).resolve().parent.parent
@@ -38,7 +38,7 @@ BILLING_LOG = (Path(__file__).resolve().parent.parent / "logs" / "billing.log")
 
 _auth = admin_auth_dep()
 
-def _parse_entries(from_date: str, to_date: str, client: Optional[str] = None):
+def _parse_entries(from_date: str, to_date: str, client: str | None = None):
     """Parse + chain-verify billing entries. The chain is verified
     cumulatively from the start of the file so a forged entry anywhere
     breaks all subsequent reads (round-2 B12). Filtered entries are
@@ -47,8 +47,8 @@ def _parse_entries(from_date: str, to_date: str, client: Optional[str] = None):
     if not BILLING_LOG.exists():
         return []
     try:
-        from_dt = datetime.fromisoformat(from_date).replace(tzinfo=timezone.utc)
-        to_dt = datetime.fromisoformat(to_date).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+        from_dt = datetime.fromisoformat(from_date).replace(tzinfo=UTC)
+        to_dt = datetime.fromisoformat(to_date).replace(hour=23, minute=59, second=59, tzinfo=UTC)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
     entries: list = []
@@ -85,7 +85,7 @@ def _parse_entries(from_date: str, to_date: str, client: Optional[str] = None):
             except Exception:
                 continue
             if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
+                ts = ts.replace(tzinfo=UTC)
             if not (from_dt <= ts <= to_dt):
                 continue
             if client and e.get("user", "").lower() != client.lower():
@@ -97,7 +97,7 @@ def _parse_entries(from_date: str, to_date: str, client: Optional[str] = None):
 def usage(
     from_date: str = Query(..., description="YYYY-MM-DD"),
     to_date: str = Query(..., description="YYYY-MM-DD"),
-    client: Optional[str] = Query(None),
+    client: str | None = Query(None),
     key: str = Depends(_auth),
 ):
     entries = _parse_entries(from_date, to_date, client)
@@ -128,7 +128,7 @@ def usage(
         "period": {"from": from_date, "to": to_date},
         "clients": result,
         "total_queries": len(entries),
-        "generated_at": datetime.now(timezone.utc).isoformat()
+        "generated_at": datetime.now(UTC).isoformat()
     }
 
 @router.get("/invoice/{client_name}")
@@ -142,8 +142,8 @@ def invoice(
     entries = _parse_entries(from_date, to_date, client_name)
 
     try:
-        from_dt = datetime.fromisoformat(from_date).replace(tzinfo=timezone.utc)
-        to_dt   = datetime.fromisoformat(to_date).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+        from_dt = datetime.fromisoformat(from_date).replace(tzinfo=UTC)
+        to_dt   = datetime.fromisoformat(to_date).replace(hour=23, minute=59, second=59, tzinfo=UTC)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
 
@@ -175,5 +175,5 @@ def invoice(
             "daily_breakdown": {d: daily[d] for d in sorted(daily)},
         },
         "note": "Flat-fee managed service. Usage summary is provided for transparency only and does not affect the invoice amount.",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
     }

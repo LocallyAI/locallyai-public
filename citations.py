@@ -32,9 +32,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from config import BASE_DIR  # type: ignore[attr-defined]
 
@@ -133,7 +131,7 @@ def _save_cache(cache: dict) -> None:
     tmp.replace(_CACHE_FILE)
 
 
-def _cache_get(key: str) -> Optional[dict]:
+def _cache_get(key: str) -> dict | None:
     with _CACHE_LOCK:
         c = _load_cache()
     entry = c.get(key)
@@ -145,8 +143,8 @@ def _cache_get(key: str) -> Optional[dict]:
     except Exception:
         return None
     if when.tzinfo is None:
-        when = when.replace(tzinfo=timezone.utc)
-    if datetime.now(timezone.utc) - when > timedelta(days=_CACHE_TTL_DAYS):
+        when = when.replace(tzinfo=UTC)
+    if datetime.now(UTC) - when > timedelta(days=_CACHE_TTL_DAYS):
         return None
     return entry.get("value")
 
@@ -155,7 +153,7 @@ def _cache_set(key: str, value: dict) -> None:
     with _CACHE_LOCK:
         c = _load_cache()
         c[key] = {
-            "cached_at": datetime.now(timezone.utc).isoformat(),
+            "cached_at": datetime.now(UTC).isoformat(),
             "value": value,
         }
         _save_cache(c)
@@ -167,7 +165,7 @@ def _check_in_corpus(cite: str) -> dict:
     """BM25-search the firm corpus for the citation string. Returns the
     top hit (source + score + snippet) or {found: false}."""
     try:
-        from retrieval import _get_retriever, _embed_query
+        from retrieval import _embed_query, _get_retriever
     except Exception:
         return {"found": False, "reason": "retrieval unavailable"}
     retriever = _get_retriever()

@@ -110,7 +110,8 @@ def _first_reachable_qdrant(urls: list[str]) -> str | None:
     that hit Qdrant at sub-second cadence should cache the client."""
     if not urls:
         return None
-    import urllib.request, urllib.error
+    import urllib.error
+    import urllib.request
     headers = {}
     if QDRANT_API_KEY:
         headers["api-key"] = QDRANT_API_KEY
@@ -269,6 +270,7 @@ _KEY_BY_HASH: dict = {}
 # pseudonymised user (16 hex chars) so the UI renders them consistently.
 # Centralised here so audit_export + monitor agree (round-2 B9).
 import hashlib as _hl
+
 SYSTEM_USER_HASH = _hl.sha256(b"system_event").hexdigest()[:16]
 del _hl
 
@@ -343,6 +345,7 @@ USERS: dict = _load_users()
 # We rate-limit the stat call to once per second to avoid pounding the
 # shared store on every API request.
 import time as _time
+
 _USERS_MTIME: float = USERS_FILE.stat().st_mtime if USERS_FILE.exists() else 0.0
 _USERS_LAST_CHECK: float = 0.0
 _USERS_CHECK_INTERVAL: float = 1.0
@@ -631,7 +634,7 @@ def _load_erased() -> set[str]:
         return set()
     out: set[str] = set()
     try:
-        with open(ERASURE_LOG, "r", encoding="utf-8", errors="replace") as f:
+        with open(ERASURE_LOG, encoding="utf-8", errors="replace") as f:
             for line in f:
                 line = line.strip()
                 if not line:

@@ -26,6 +26,7 @@ Run:
   # → dist/locallyai-sop-vYYYYMMDD-HHMM.pdf
 """
 from __future__ import annotations
+
 import argparse
 import datetime
 import re
@@ -369,7 +370,7 @@ def remove_frontmatter(md: str) -> str:
 
 def build_html(chapters: list[tuple[str, str]]) -> str:
     import markdown
-    today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    today = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M UTC")
     md_ext = ["fenced_code", "tables", "toc", "attr_list", "sane_lists"]
 
     master_rel = SOP_MASTER.relative_to(REPO).as_posix()
@@ -623,7 +624,7 @@ def render_with_chrome(html_path: Path, pdf_path: Path) -> None:
         "--print-to-pdf-no-header",
         f"file://{html_path.absolute()}",
     ]
-    print(f"  → Chrome render…")
+    print("  → Chrome render…")
     subprocess.run(cmd, check=True, capture_output=True)
 
 
@@ -671,7 +672,7 @@ def main():
     if args.out:
         pdf_path = Path(args.out)
     else:
-        stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d-%H%M")
+        stamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%d-%H%M")
         pdf_path = dist / f"{OUTPUT_PREFIX}-{git_ref().split()[0]}-{stamp}.pdf"
 
     with tempfile.TemporaryDirectory() as td:

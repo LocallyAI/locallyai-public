@@ -21,6 +21,7 @@ import requests
 # Suppress the self-signed-cert warning from urllib3 — install.sh generates a
 # self-signed cert by design (LAN-only deployment).
 import urllib3
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 

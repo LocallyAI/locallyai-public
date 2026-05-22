@@ -7,7 +7,7 @@ import subprocess
 import sys
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 BASE_DIR  = Path(__file__).resolve().parent.parent
@@ -35,7 +35,7 @@ log = logging.getLogger("resurrector")
 
 def _log(event: str, stage: str, detail: str = ""):
     entry = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "event": event,
         "stage": stage,
         "detail": detail,
@@ -162,7 +162,7 @@ def _send_alert(message: str, level: str = "warning"):
 
 def _diagnostic_dump(reason: str) -> str:
     lines = [
-        f"RECOVERY FAILED — {datetime.now(timezone.utc).isoformat()}",
+        f"RECOVERY FAILED — {datetime.now(UTC).isoformat()}",
         f"Trigger: {reason}",
     ]
     try:

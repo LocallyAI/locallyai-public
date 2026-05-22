@@ -34,10 +34,10 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from retrieval import RetrievedChunk
+    pass
 
 log = logging.getLogger("reranker")
 
@@ -55,7 +55,7 @@ def is_enabled() -> bool:
     return os.environ.get("LOCALLYAI_RERANKER", "on").lower() != "off"
 
 
-def _read_pin(model_id: str) -> Optional[str]:
+def _read_pin(model_id: str) -> str | None:
     """Tiny TOML-ish parser — same shape as mlx_inference._read_pin so
     operators have one mental model for "pin a model to a HF commit".
 
@@ -68,7 +68,7 @@ def _read_pin(model_id: str) -> Optional[str]:
         return None
     try:
         section = None
-        with open(_PIN_FILE, "r", encoding="utf-8") as f:
+        with open(_PIN_FILE, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line.startswith("[") and line.endswith("]"):
@@ -80,7 +80,7 @@ def _read_pin(model_id: str) -> Optional[str]:
     return None
 
 
-def _resolve_commit(model_id: str) -> Optional[str]:
+def _resolve_commit(model_id: str) -> str | None:
     """Best-effort: read the local HF cache for the loaded commit.
     Returns None if we can't determine it."""
     try:
@@ -148,7 +148,7 @@ def _load_model():
                     log.warning(f"RERANKER INTEGRITY DRIFT acknowledged via "
                                 f"LOCALLYAI_RERANKER_DRIFT_ACK=1: {expected[:12]}… → {actual[:12]}…")
                 elif not actual:
-                    log.warning(f"RERANKER INTEGRITY: pin present but commit not resolvable")
+                    log.warning("RERANKER INTEGRITY: pin present but commit not resolvable")
                 else:
                     log.info(f"RERANKER INTEGRITY: commit matches pin ({actual[:12]}…)")
             else:

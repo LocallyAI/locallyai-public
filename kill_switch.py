@@ -49,11 +49,8 @@ import logging
 import os
 import re
 import time
-import urllib.request
 import urllib.error
-from pathlib import Path
-from typing import Optional
-
+import urllib.request
 
 log = logging.getLogger("kill_switch")
 
@@ -71,7 +68,7 @@ _CACHE_TTL_SEC = 60
 _cache: dict = {"fetched_at": 0.0, "payload": None, "error": None}
 
 
-def _fetch() -> tuple[Optional[dict], Optional[str]]:
+def _fetch() -> tuple[dict | None, str | None]:
     """Returns (payload, error). One of them is always None.
 
     Red-team finding 4.4 + 4.5: previously the payload was trusted
@@ -235,7 +232,7 @@ def is_blocked(tag: str, version: str) -> tuple[bool, str]:
     return False, ""
 
 
-def get_min_required_version() -> Optional[str]:
+def get_min_required_version() -> str | None:
     """The minimum version firms MUST update past. Returned to the
     manager UI so old deployments see a "you must update" banner."""
     payload, _ = _fetch()
@@ -271,8 +268,9 @@ if __name__ == "__main__":
     # module-level constants captured os.environ at import time, before
     # load_dotenv ran — re-resolve them here so the CLI matches reality.
     try:
-        from dotenv import load_dotenv as _load_dotenv
         from pathlib import Path as _Path
+
+        from dotenv import load_dotenv as _load_dotenv
         _load_dotenv(_Path(__file__).resolve().parent / ".env", override=True)
         # Re-bind module constants from the freshly-loaded env.
         KILL_SWITCH_URL      = os.environ.get("LOCALLYAI_KILL_SWITCH_URL", KILL_SWITCH_URL)

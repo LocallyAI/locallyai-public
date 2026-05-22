@@ -17,7 +17,7 @@ import hmac
 import os
 
 from fastapi import HTTPException, Security
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 _security = HTTPBearer()
 

@@ -15,7 +15,7 @@ import logging
 import os
 import smtplib
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.mime.text import MIMEText
 
 log = logging.getLogger("alerting")
@@ -36,7 +36,7 @@ def _send_webhook(message: str, level: str) -> None:
         "deployment": _DEPLOYMENT_ID,
         "level": level,
         "message": message,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }).encode()
     try:
         req = urllib.request.Request(

@@ -25,9 +25,8 @@ recommends it.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import Literal
-
 
 # ── Hardware catalog (Mac Studio configs commonly available) ────────────────
 # Indicative GBP prices from late 2025 retail; refresh quarterly.

@@ -38,13 +38,9 @@ import contextlib
 import fcntl
 import json
 import os
-import time
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Optional
+from datetime import UTC, datetime
 
 from config import SHARED_DIR
-
 
 _ACL_FILE = SHARED_DIR / "doc_acls.json"
 _LOCK_FILE = SHARED_DIR / ".doc_acls.lock"
@@ -137,7 +133,7 @@ def set_acl(source_name: str, allowed_users: list[str], matter_code: str = "",
             "allowed_users":  list(dict.fromkeys(allowed_users)),  # de-dup, preserve order
             "matter_code":    matter_code or "",
             "ethical_wall":   list(ethical_wall or []),
-            "set_at":         datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "set_at":         datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "set_by":         set_by,
             "version":        new_version,
         }

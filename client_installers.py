@@ -39,10 +39,8 @@ import shutil
 import subprocess
 import threading
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional
-
 
 log = logging.getLogger("client_installers")
 
@@ -145,7 +143,7 @@ def status() -> dict:
     }
 
 
-def resolve_file(name: str) -> Optional[Path]:
+def resolve_file(name: str) -> Path | None:
     """Map a UI-supplied filename to a real on-disk path; reject anything
     that isn't in the installers dir (path-traversal hardening)."""
     safe = Path(name).name
@@ -218,7 +216,7 @@ def refresh() -> dict:
         try:
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
         except subprocess.TimeoutExpired:
-            m.last_status = f"failed: gh download timed out after 5 min"
+            m.last_status = "failed: gh download timed out after 5 min"
             _save_meta(m)
             return {**status(), "ok": False, "detail": m.last_status}
         if r.returncode != 0:

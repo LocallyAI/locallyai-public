@@ -22,8 +22,11 @@ The "winner" is whichever file currently lives at the unsuffixed path
 the dashboard.
 """
 from __future__ import annotations
-import os, json, logging, shutil
-from datetime import datetime, timezone
+
+import json
+import logging
+import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 
 _log = logging.getLogger("sync_conflicts")
@@ -57,7 +60,7 @@ def scan_and_alert(shared_dir: Path) -> list[dict]:
                 quarantine.mkdir(parents=True, exist_ok=True)
                 dest = quarantine / f.name
                 shutil.move(str(f), str(dest))
-                ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                ts = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
                 found.append({
                     "timestamp": ts,
                     "event":     "sync_conflict",

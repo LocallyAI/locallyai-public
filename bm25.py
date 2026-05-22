@@ -3,7 +3,6 @@ import json
 import math
 import re
 from pathlib import Path
-from typing import Optional
 
 _INDEX_FILE = "bm25_index.json"
 _K1 = 1.5
@@ -58,7 +57,7 @@ class BM25Index:
         }
 
     def search(
-        self, query: str, top_k: int = 10, firm_id: Optional[str] = None
+        self, query: str, top_k: int = 10, firm_id: str | None = None
     ) -> list[dict]:
         if not self._docs or self._avg_dl == 0:
             return []

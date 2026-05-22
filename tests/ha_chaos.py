@@ -15,6 +15,7 @@ Run from the repo root:
 Exit 0 on success; non-zero on first failure.
 """
 from __future__ import annotations
+
 import importlib
 import json
 import os
@@ -28,6 +29,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
 from dotenv import load_dotenv  # noqa: E402
+
 load_dotenv(REPO / ".env")
 
 ADMIN_KEY = os.environ.get("LOCALLYAI_ADMIN_KEY", "")
@@ -242,8 +244,8 @@ def main() -> int:
         try:
             api_x, client_x, _, lines_x = _bring_up(
                 "chaos-erase", workdir / "node-erase-logs", shared)
-            from config import pseudonymise_user, ERASURE_LOG  # noqa: WPS433
             import config as _cfg
+            from config import ERASURE_LOG, pseudonymise_user  # noqa: WPS433
             pseudonym = pseudonymise_user("Admin")
             ERASURE_LOG.parent.mkdir(parents=True, exist_ok=True)
             with open(ERASURE_LOG, "a") as f:
@@ -270,8 +272,7 @@ def main() -> int:
                 "chaos-stream", workdir / "node-stream-logs", shared)
             import mlx_inference as _mlx
             def _fake_stream(messages, model, max_tokens, temperature):
-                for tok in ["alpha", " ", "beta"]:
-                    yield tok
+                yield from ["alpha", " ", "beta"]
             _mlx.stream_tokens = _fake_stream
             api_x.BACKEND = "mlx"  # force the streaming branch
             pre = lines_x()
@@ -301,7 +302,7 @@ def main() -> int:
         try:
             api_x, client_x, _, lines_x = _bring_up(
                 "chaos-salt", workdir / "node-salt-logs", shared)
-            from config import pseudonymise_user, current_salt_era
+            from config import current_salt_era, pseudonymise_user
             old_era    = current_salt_era()
             old_pseudo = pseudonymise_user("Admin")
             assert old_pseudo, "salt must be set; check .env"
@@ -329,7 +330,8 @@ def main() -> int:
             # Re-import api/config so the API picks up the new salt.
             api_x, client_x, _, lines_x = _bring_up(
                 "chaos-salt", workdir / "node-salt-logs", shared)
-            from config import pseudonymise_user as p_now, current_salt_era as e_now
+            from config import current_salt_era as e_now
+            from config import pseudonymise_user as p_now
             new_pseudo_admin = p_now("Admin")
             assert new_pseudo_admin and new_pseudo_admin != old_pseudo, \
                 f"new-era pseudonym must differ from old-era: {old_pseudo} vs {new_pseudo_admin}"
@@ -367,8 +369,10 @@ def main() -> int:
         try:
             api_x, client_x, _, _ = _bring_up(
                 "chaos-abort", workdir / "node-abort-logs", shared)
+            import threading as _thr
+            import time as _time
+
             import mlx_inference as _mlx
-            import time as _time, threading as _thr
 
             # Fake mlx_lm.stream_generate that yields slowly so we can close
             # the consumer mid-stream. Inject into the module namespace so
@@ -430,7 +434,7 @@ def main() -> int:
             gen2 = _mlx.stream("again", max_tokens=10, temperature=0.1)
             ok = False
             try:
-                for i, tok in enumerate(gen2):
+                for i, _tok in enumerate(gen2):
                     if i == 2:
                         ok = True
                         gen2.close()

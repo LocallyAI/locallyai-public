@@ -19,7 +19,6 @@ default VECTOR_SIZE so no other changes are needed.
 """
 import logging
 import os
-from typing import Optional
 
 logger = logging.getLogger("locallyai.embed_local")
 
@@ -57,7 +56,7 @@ def _ensure_loaded() -> bool:
         return False
 
 
-def embed(text: str) -> Optional[list[float]]:
+def embed(text: str) -> list[float] | None:
     """Return the embedding vector for `text`, or None on failure."""
     if not _ensure_loaded():
         return None
@@ -71,7 +70,7 @@ def embed(text: str) -> Optional[list[float]]:
         return None
 
 
-def embedding_dim() -> Optional[int]:
+def embedding_dim() -> int | None:
     """Probe the loaded model for its output dimension. Useful for VECTOR_SIZE."""
     if not _ensure_loaded():
         return None

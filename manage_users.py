@@ -1,4 +1,8 @@
-import os, json, re, secrets, sys, hmac, hashlib
+import hashlib
+import json
+import os
+import re
+import secrets
 from pathlib import Path
 
 # Load .env so erasure tombstones use the same LOCALLYAI_AUDIT_SALT the API
@@ -18,8 +22,12 @@ BASE_DIR   = Path(__file__).resolve().parent
 # Use the same USERS_FILE config.py exposes so single-node deployments keep
 # using ./users.json and HA deployments pick up SHARED_DIR/users.json.
 import sys as _sys
+
 _sys.path.insert(0, str(BASE_DIR))
+from datetime import UTC
+
 from config import USERS_FILE  # noqa: E402
+
 
 def _load() -> dict:
     if USERS_FILE.exists():
@@ -42,8 +50,8 @@ def _validate_key(key: str):
 
 
 def _now_iso() -> str:
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    from datetime import datetime
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _expiry_iso(days: int | None = None) -> str | None:
@@ -52,12 +60,12 @@ def _expiry_iso(days: int | None = None) -> str | None:
     GDPR art. 5(e) (storage limitation) and ISO 27001 A.8.5 (secure auth)
     both call for credential rotation; we make the default short and the
     'forever' choice explicit and auditable."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
     if days is None:
         days = int(os.environ.get("LOCALLYAI_KEY_TTL_DAYS", "90"))
     if days <= 0:
         return None
-    return (datetime.now(timezone.utc) + timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return (datetime.now(UTC) + timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _coerce_entry(value) -> dict:
@@ -154,8 +162,7 @@ def erase_user(name: str) -> dict:
     Returns a summary dict for the CLI to print + the operator to file
     against the data-subject's erasure request as evidence of action.
     """
-    import datetime, hashlib
-    from datetime import timezone
+    import datetime
     users = _load()
     if name not in users:
         raise ValueError(f"User {name!r} not found.")
@@ -164,7 +171,7 @@ def erase_user(name: str) -> dict:
     # blocks audit writes regardless of which salt was active when an
     # entry was originally chained. The current-era hash is also the
     # primary form for live-traffic blocking via is_erased().
-    from config import pseudonymise_user, known_salt_eras, current_salt_era
+    from config import current_salt_era, known_salt_eras, pseudonymise_user
     eras = known_salt_eras() or [""]
     pseudonyms = sorted({
         pseudonymise_user(name, era=e) for e in eras
@@ -181,7 +188,7 @@ def erase_user(name: str) -> dict:
     redacted = 0
     if billing.exists():
         tmp = billing.with_suffix(".redacted")
-        with open(billing, "r", encoding="utf-8") as fin, \
+        with open(billing, encoding="utf-8") as fin, \
              open(tmp,     "w", encoding="utf-8") as fout:
             for line in fin:
                 try:
@@ -213,7 +220,7 @@ def erase_user(name: str) -> dict:
     # parser picks up every era. Same timestamp + same regulation tag so
     # they group in the operator's view. Single-era deployments produce
     # exactly one line, identical to the prior schema.
-    ts = datetime.datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    ts = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     with shared_lock(ERASURE_LOG, timeout=5.0):
         with open(ERASURE_LOG, "a", encoding="utf-8") as f:
             for p in pseudonyms:
@@ -268,7 +275,7 @@ def rotate_admin_key() -> dict:
     No no-op path.
     """
     import secrets
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     env_path = BASE_DIR / ".env"
     if not env_path.exists():
@@ -294,7 +301,7 @@ def rotate_admin_key() -> dict:
     if not seen:
         # Brand-new entry — append under a marker comment so it's findable.
         out_lines.append("")
-        out_lines.append(f"# Admin key rotated {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}")
+        out_lines.append(f"# Admin key rotated {datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')}")
         out_lines.append(f"LOCALLYAI_ADMIN_KEY={new_key}")
     env_path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
     from platform_compat import chmod_safe
@@ -310,7 +317,7 @@ def rotate_admin_key() -> dict:
     chain_state = LOG_DIR / ".audit_chain"
     hmac_key = os.environ.get("LOCALLYAI_AUDIT_HMAC_KEY", "").encode()
     entry = {
-        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "node_id":   NODE_ID,
         "event":     "admin_key_rotation",
         "previous_admin_key_sha256_prefix": (
@@ -319,7 +326,8 @@ def rotate_admin_key() -> dict:
         "regulation": "GDPR art. 32 / ISO 27001 A.5.16 (privileged access management)",
     }
     if hmac_key and audit_log.exists():
-        import hmac, json as _json
+        import hmac
+        import json as _json
         prev = chain_state.read_text(encoding="utf-8").strip() if chain_state.exists() else ("0" * 64)
         entry_json = _json.dumps(entry, sort_keys=True)
         chain = hmac.new(hmac_key, (prev + entry_json).encode(), hashlib.sha256).hexdigest()
@@ -353,7 +361,7 @@ def rotate_audit_salt(*, keep_eras: int = 4) -> dict:
     smoke-test should use a sandbox deployment.
     """
     import secrets
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     env_path = BASE_DIR / ".env"
     if not env_path.exists():
@@ -429,7 +437,7 @@ def rotate_audit_salt(*, keep_eras: int = 4) -> dict:
     appended = [k for k in new_kv if k not in seen]
     if appended:
         out_lines.append("")
-        out_lines.append(f"# Audit-salt eras (rotated {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')})")
+        out_lines.append(f"# Audit-salt eras (rotated {datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')})")
         for k in appended:
             out_lines.append(f"{k}={new_kv[k]}")
     env_path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
@@ -447,7 +455,7 @@ def rotate_audit_salt(*, keep_eras: int = 4) -> dict:
     chain_state = LOG_DIR / ".audit_chain"
     hmac_key = os.environ.get("LOCALLYAI_AUDIT_HMAC_KEY", "").encode()
     boundary = {
-        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "node_id":   NODE_ID,
         "event":     "salt_era_boundary",
         "previous_era": old_era_id,
@@ -459,7 +467,8 @@ def rotate_audit_salt(*, keep_eras: int = 4) -> dict:
         "regulation": "GDPR art. 32 / ISO 27001 A.8.24 (key rotation)",
     }
     if hmac_key and audit_log.exists():
-        import hmac, json as _json
+        import hmac
+        import json as _json
         prev = chain_state.read_text(encoding="utf-8").strip() if chain_state.exists() else ("0" * 64)
         entry_json = _json.dumps(boundary, sort_keys=True)
         chain = hmac.new(hmac_key, (prev + entry_json).encode(), hashlib.sha256).hexdigest()
@@ -485,10 +494,12 @@ def _broadcast_fleet_refresh() -> dict:
     Returns {peer_id: status_string}. Failures are recorded but never
     raised — the shared store is the source of truth; the fan-out is a
     latency optimisation, not a correctness requirement."""
-    import urllib.request, urllib.error, ssl
+    import ssl
+    import urllib.error
+    import urllib.request
     try:
-        from config import NODE_ID
         import fleet as _fleet
+        from config import NODE_ID
     except Exception:
         return {}
     admin = os.environ.get("LOCALLYAI_ADMIN_KEY", "")

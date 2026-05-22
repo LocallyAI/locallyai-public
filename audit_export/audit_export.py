@@ -1,10 +1,13 @@
+import csv
 import hashlib
-import os, csv, io, logging
+import io
+import logging
+import os
 import sys as _sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
-from fastapi import APIRouter, HTTPException, Depends, Query
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 # Ensure repo root is importable for the audit_reader helper.
@@ -24,12 +27,13 @@ MAX_RANGE_DAYS = 90
 # rotation propagates without restart, single source of truth for the
 # guard so the four routers can't drift apart again.
 from auth import admin_auth_dep
+
 _auth = admin_auth_dep()
 
 def _validate_dates(from_date: str, to_date: str):
     try:
-        from_dt = datetime.fromisoformat(from_date).replace(tzinfo=timezone.utc)
-        to_dt   = datetime.fromisoformat(to_date).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+        from_dt = datetime.fromisoformat(from_date).replace(tzinfo=UTC)
+        to_dt   = datetime.fromisoformat(to_date).replace(hour=23, minute=59, second=59, tzinfo=UTC)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
     if to_dt < from_dt:
@@ -60,7 +64,7 @@ def _iter_entries(from_dt, to_dt, client=None):
         except Exception:
             return False
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
+            ts = ts.replace(tzinfo=UTC)
         if not (from_dt <= ts <= to_dt):
             return False
         if client_hash and e.get("user_hash", "") != client_hash:
@@ -73,7 +77,7 @@ def _iter_entries(from_dt, to_dt, client=None):
 def export_csv(
     from_date: str = Query(..., description="YYYY-MM-DD"),
     to_date:   str = Query(..., description="YYYY-MM-DD"),
-    client: Optional[str] = Query(None, max_length=128),
+    client: str | None = Query(None, max_length=128),
     _user: str = Depends(_auth),
 ):
     from_dt, to_dt = _validate_dates(from_date, to_date)
@@ -97,7 +101,7 @@ def export_csv(
 def export_summary(
     from_date: str = Query(..., description="YYYY-MM-DD"),
     to_date:   str = Query(..., description="YYYY-MM-DD"),
-    client: Optional[str] = Query(None, max_length=128),
+    client: str | None = Query(None, max_length=128),
     _user: str = Depends(_auth),
 ):
     from_dt, to_dt = _validate_dates(from_date, to_date)
@@ -128,5 +132,5 @@ def export_summary(
         "period": {"from": from_date, "to": to_date},
         "total_queries": total_queries,
         "by_user": by_user,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
     }
