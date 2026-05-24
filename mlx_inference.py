@@ -16,10 +16,13 @@ dedicated worker thread. The worker is started lazily on first use.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import queue
+import re
 import threading
+import uuid
 from typing import Iterator
 
 log = logging.getLogger("mlx_inference")
@@ -184,7 +187,64 @@ def ensure_loaded(model_id: str | None = None):
     _run_on_mlx_thread(_ensure_loaded_sync, model_id)
 
 
-def _generate_sync(messages, model: str | None, max_tokens: int, temperature: float):
+# Qwen 2.5 / Hermes / Llama-3.x tool-call output convention. The model
+# emits `<tool_call>\n{...}\n</tool_call>` blocks (Qwen 2.5 native format,
+# also re-used by Hermes and many fine-tunes). Tolerant regex — accepts
+# whitespace variations and DOTALL across multi-line JSON arguments.
+_TOOL_CALL_RE = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.DOTALL)
+
+
+def _parse_tool_calls(text: str) -> tuple[str | None, list[dict] | None]:
+    """Extract OpenAI-shaped tool_calls from a raw model output string.
+
+    Returns ``(content_without_tool_blocks, tool_calls_list)``. Either
+    side can be None. If no tool blocks are present, returns the original
+    text and None — callers should treat the result the same as a plain
+    string response.
+    """
+    if not text or "<tool_call>" not in text:
+        return text or None, None
+    calls: list[dict] = []
+    for raw in _TOOL_CALL_RE.findall(text):
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            # The model emitted a malformed tool_call block — skip it
+            # rather than 500ing. The caller will see only the prose.
+            continue
+        name = parsed.get("name")
+        if not name:
+            continue
+        # OpenAI requires `arguments` to be a JSON-encoded STRING (not a
+        # JSON object). Re-serialise whatever the model emitted.
+        args = parsed.get("arguments", {})
+        if not isinstance(args, str):
+            args = json.dumps(args)
+        calls.append({
+            "id": f"call_{uuid.uuid4().hex[:24]}",
+            "type": "function",
+            "function": {"name": name, "arguments": args},
+        })
+    # Strip the tool_call blocks from the prose. Whitespace cleanup keeps
+    # the residual content readable for the audit-agent.
+    residual = _TOOL_CALL_RE.sub("", text).strip()
+    return (residual or None), (calls or None)
+
+
+def _generate_sync(messages, model: str | None, max_tokens: int, temperature: float,
+                   tools: list[dict] | None = None,
+                   tool_choice: str | dict | None = None):
+    """Run a single MLX generation. Returns a dict
+    ``{"content": str | None, "tool_calls": list | None}``.
+
+    When ``tools`` is None, ``tool_calls`` will be None and ``content``
+    carries the model's text — semantically identical to the pre-tools
+    behaviour (string output, just wrapped in a dict). ``tool_choice`` is
+    currently advisory: Qwen's chat template honours the presence of
+    tools but does not surface a separate tool_choice slot. We forward
+    it to apply_chat_template only if the tokenizer signals support, so
+    future tokenizer upgrades pick it up automatically.
+    """
     _ensure_loaded_sync(model)
     from mlx_lm import generate as mlx_generate
     from mlx_lm.sample_utils import make_logits_processors, make_sampler
@@ -193,20 +253,61 @@ def _generate_sync(messages, model: str | None, max_tokens: int, temperature: fl
         messages = [{"role": "user", "content": messages}]
     fallback_text = messages[-1].get("content", "") if messages else ""
     try:
-        formatted = _tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
+        template_kwargs: dict = {"tokenize": False, "add_generation_prompt": True}
+        if tools:
+            # Qwen 2.5's tokenizer supports `tools=` natively — it renders
+            # the per-tool JSON schema into the system prompt and primes
+            # the <tool_call>...</tool_call> response convention.
+            template_kwargs["tools"] = tools
+        formatted = _tokenizer.apply_chat_template(messages, **template_kwargs)
+    except TypeError:
+        # The active tokenizer doesn't recognise the `tools` kwarg.
+        # Inline a minimal tools description into the system message so
+        # the model still has something to call against, and fall back
+        # to the no-kwarg template path so generation proceeds. This
+        # keeps audit-agent unblocked on older tokenizers.
+        if tools:
+            tool_lines = []
+            for t in tools:
+                fn = (t or {}).get("function") or {}
+                tool_lines.append(json.dumps({
+                    "name":        fn.get("name", ""),
+                    "description": fn.get("description", ""),
+                    "parameters":  fn.get("parameters", {}),
+                }))
+            sys_msg = {
+                "role": "system",
+                "content": (
+                    "You have access to the following tools. To call a tool, "
+                    "emit a JSON object inside <tool_call>...</tool_call> "
+                    "tags with `name` and `arguments` fields.\n\n"
+                    + "\n".join(tool_lines)
+                ),
+            }
+            messages = [sys_msg] + list(messages)
+        try:
+            formatted = _tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+        except Exception:
+            formatted = fallback_text
     except Exception:
         formatted = fallback_text
 
     sampler = make_sampler(temp=temperature, top_p=0.9)
     logits_processors = make_logits_processors(repetition_penalty=1.1)
-    return mlx_generate(
+    text = mlx_generate(
         _model, _tokenizer, prompt=formatted, verbose=False,
         max_tokens=max_tokens,
         sampler=sampler,
         logits_processors=logits_processors,
     )
+    if not tools:
+        # Preserve the legacy "content is the full text" contract for
+        # tool-less callers. content is the raw text, tool_calls is None.
+        return {"content": text, "tool_calls": None}
+    content, tool_calls = _parse_tool_calls(text)
+    return {"content": content, "tool_calls": tool_calls}
 
 
 def _stream_pump_sync(messages, model: str | None, max_tokens: int,
@@ -331,14 +432,34 @@ def stream(messages, model: str | None = None,
 
 
 def generate(messages, model: str | None = None, stream: bool = False,
-             max_tokens: int = 2048, temperature: float = 0.1) -> str | Iterator[str]:
+             max_tokens: int = 2048, temperature: float = 0.1,
+             tools: list[dict] | None = None,
+             tool_choice: str | dict | None = None):
     """`messages` is the OpenAI-style chat list (system / user / assistant).
     A bare string is still accepted for backwards compatibility with old
-    callers and is treated as a single user turn."""
+    callers and is treated as a single user turn.
+
+    Return shape:
+      * stream=True  → Iterator[str] of text tokens (legacy contract).
+        Streaming-with-tools is intentionally NOT supported here — the
+        chat handler raises 501 before reaching this path. If a future
+        caller invokes generate(stream=True, tools=...) directly, the
+        tool blocks will simply pass through in the token stream and
+        the caller must parse them itself.
+      * stream=False → dict ``{"content": str | None,
+                               "tool_calls": list | None}``. When
+        ``tools`` is None, ``tool_calls`` is None and ``content`` is
+        the full text — semantically the same as the pre-tools string
+        return, just wrapped in a dict.
+    """
     if stream:
+        # Streaming path is text-only; tools/tool_choice are ignored.
+        # The chat handler refuses stream=True with tools at the route
+        # boundary, so we should never reach here with both set.
         return stream_tokens(messages, model, max_tokens, temperature)
     return _run_on_mlx_thread(
-        _generate_sync, messages, model, max_tokens, temperature)
+        _generate_sync, messages, model, max_tokens, temperature,
+        tools=tools, tool_choice=tool_choice)
 
 
 # Public alias — `stream` shadows the kw-arg name in generate(); callers that

@@ -16,8 +16,16 @@ Compatibility surfaces:
   * `BACKEND` stays on the `api` package (set from env in api/__init__.py
     and mutated by ha_chaos.py via `api_x.BACKEND = "mlx"`). This module
     reads it dynamically through `api` for the same reason.
+
+NOTE: this module deliberately does NOT use `from __future__ import
+annotations`. The combination of stringified annotations + slowapi's
+`@limiter.limit(...)` decorator wrapping a FastAPI handler whose body
+parameter is a Pydantic model causes FastAPI to misroute the body as
+a query parameter (returns 422 "loc: ['query','req']"). Python 3.11
+already supports PEP 585/604 syntax (`list[X]`, `X | None`) natively
+without the future import, so we use them directly and keep the
+parameter annotations live for FastAPI's introspection.
 """
-from __future__ import annotations
 
 import hashlib
 import json
@@ -25,8 +33,9 @@ import logging
 import os
 import threading
 import time
+from typing import Annotated, Any, Optional, Union
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -54,8 +63,23 @@ router = APIRouter()
 
 # ── Request models ────────────────────────────────────────────────────────────
 class Message(BaseModel):
+    # OpenAI tool-calling protocol allows role="tool" (function results sent
+    # back to the assistant), so `role` stays a plain string rather than a
+    # Literal — runtime validation downstream rejects anything that isn't
+    # one of system / user / assistant / tool.
     role: str
-    content: str
+    # `content` is None when an assistant turn carries only `tool_calls`
+    # (the model emitted a function-call and no prose). OpenAI permits this.
+    content: Optional[str] = None
+    # Assistant-emitted tool calls. Each entry has the OpenAI shape:
+    # {"id": "call_…", "type": "function",
+    #  "function": {"name": "...", "arguments": "<json-string>"}}
+    tool_calls: Optional[list[dict[str, Any]]] = None
+    # When `role="tool"`, the caller MUST set tool_call_id to the id of the
+    # assistant tool_call this message is responding to, and `name` to the
+    # function name. The audit-agent relies on this round-trip.
+    tool_call_id: Optional[str] = None
+    name: Optional[str] = None  # OpenAI tool-call protocol: the function name on role="tool" responses
 
 
 class ChatRequest(BaseModel):
@@ -64,6 +88,12 @@ class ChatRequest(BaseModel):
     stream: bool | None = False
     max_tokens: int | None = 2048
     temperature: float | None = 0.1
+    # OpenAI tool-calling — when populated, the underlying backend
+    # (Ollama ≥ 0.2 / LM Studio / MLX via Qwen 2.5 tokenizer) is asked to
+    # emit function calls instead of (or in addition to) plain prose. When
+    # None, behaviour is identical to before this field existed.
+    tools: Optional[list[dict[str, Any]]] = None
+    tool_choice: Optional[Union[str, dict[str, Any]]] = "auto"
     matter_code: str | None = Field(
         None,
         description="Law firm matter/file reference for audit and billing attribution",
@@ -85,27 +115,49 @@ class ChatRequest(BaseModel):
 
 
 # ── Inference backends ────────────────────────────────────────────────────────
-def _infer(messages: list[dict], model: str | None, stream: bool, max_tokens: int, temperature: float):
+def _infer(messages: list[dict], model: str | None, stream: bool,
+           max_tokens: int, temperature: float,
+           tools: list[dict] | None = None,
+           tool_choice: str | dict | None = None) -> dict:
+    """Run a single non-streaming inference and return an OpenAI-shaped
+    message dict: ``{"content": str | None, "tool_calls": list | None}``.
+
+    When ``tools`` is None, ``tool_calls`` in the return value will also be
+    None and ``content`` carries the assistant's text — the same payload
+    pre-existing chat callers consumed (now wrapped in a dict). The chat
+    handler tolerates a plain string return as well, for the benefit of
+    tests/ha_chaos.py's monkey-patched ``_fake_infer``.
+    """
     # Read BACKEND from the api package at call time so ha_chaos.py's
     # `api_x.BACKEND = "mlx"` reassignment is honoured.
     import api as _api_pkg
     backend = getattr(_api_pkg, "BACKEND", "ollama")
     if backend == "mlx":
         from mlx_inference import generate
-        return generate(messages, model, stream, max_tokens, temperature)
+        return generate(messages, model, stream, max_tokens, temperature,
+                        tools=tools, tool_choice=tool_choice)
     # OpenAI-compatible chat completions. Works against:
     #   - Ollama (>=0.1.30) at /v1/chat/completions on port 11434
     #   - LM Studio at /v1/chat/completions on port 1234
     #   - vLLM, LocalAI, OpenAI itself, etc.
     import urllib.request as _url
     chosen_model = model or os.environ.get("OLLAMA_MODEL", LLM_MODEL)
-    payload = json.dumps({
+    body: dict = {
         "model": chosen_model,
         "messages": messages,
         "stream": False,
         "max_tokens": max_tokens,
         "temperature": temperature,
-    }).encode()
+    }
+    # Ollama (>= 0.2) and LM Studio both speak OpenAI's tools / tool_choice
+    # natively; the upstream returns choices[0].message.tool_calls in the
+    # standard shape and we relay it verbatim. Only populate when the caller
+    # asked for tools — keeps the wire format identical for tool-less callers.
+    if tools:
+        body["tools"] = tools
+        if tool_choice is not None:
+            body["tool_choice"] = tool_choice
+    payload = json.dumps(body).encode()
     req = _url.Request(
         f"{LLM_BASE_URL}/v1/chat/completions",
         data=payload,
@@ -113,7 +165,11 @@ def _infer(messages: list[dict], model: str | None, stream: bool, max_tokens: in
     )
     with _url.urlopen(req, timeout=300) as r:
         data = json.loads(r.read())
-    return data.get("choices", [{}])[0].get("message", {}).get("content", "")
+    msg = (data.get("choices") or [{}])[0].get("message", {}) or {}
+    return {
+        "content":    msg.get("content"),
+        "tool_calls": msg.get("tool_calls"),
+    }
 
 
 def _stream_ollama(messages: list[dict], model: str | None, max_tokens: int,
@@ -349,7 +405,19 @@ def models(request: Request, user: str = Depends(_auth)):
 
 @router.post("/v1/chat/completions")
 @limiter.limit("30/minute")
-def chat(request: Request, req: ChatRequest, user: str = Depends(_auth)):
+def chat(request: Request,
+         req: Annotated[ChatRequest, Body(...)],
+         user: str = Depends(_auth)):
+    # Explicit Annotated[..., Body(...)] annotation: FastAPI ≥ 0.115 /
+    # pydantic ≥ 2.10 tightened body-vs-query inference and started routing
+    # un-annotated Pydantic model parameters to `query` when the dependency
+    # tree contains a Request parameter that "could" come from the query
+    # side of things. Without this, JSON POSTs return 422 with
+    # `loc=["query","req"]`. The Annotated form (instead of `req: X =
+    # Body(...)`) plays nicely with `from __future__ import annotations`
+    # — the bare-default form leaves Body() inside a ForwardRef that
+    # pydantic can't rebuild. Restores the old wire behaviour without
+    # changing the request contract for any caller.
     # Resolve BACKEND and _infer through the `api` package so that
     # tests/ha_chaos.py's `api_x.BACKEND = "mlx"` and `api_x._infer = ...`
     # reassignments reach this call site.
@@ -365,8 +433,22 @@ def chat(request: Request, req: ChatRequest, user: str = Depends(_auth)):
     if cached is not None:
         return cached
 
-    query = req.messages[-1].content if req.messages else ""
+    # For retrieval / audit hashing we want a representative query string.
+    # The last message's `content` is usually it, but in OpenAI tool-calling
+    # turns the last message can be (a) an assistant turn with
+    # content=None and only tool_calls, or (b) a role="tool" result. Fall
+    # back to the most-recent user turn in those cases so retrieval still
+    # has something to ground on. If we still have nothing AND no tools
+    # were sent, the request is genuinely empty and we refuse it.
+    last = req.messages[-1] if req.messages else None
+    query = (last.content if last else "") or ""
     if not query:
+        # Walk backwards for the latest user turn with text content.
+        for m in reversed(req.messages or []):
+            if m.role == "user" and m.content:
+                query = m.content
+                break
+    if not query and not req.tools:
         raise HTTPException(status_code=400, detail="No message content")
     if len(query) > 32_000:
         raise HTTPException(status_code=413, detail="Prompt too long (max 32,000 chars)")
@@ -492,13 +574,38 @@ def chat(request: Request, req: ChatRequest, user: str = Depends(_auth)):
 
     # Pass the full conversation history so the assistant remembers the user's
     # prior turns; the rate limit and 32k char cap on the latest turn keep
-    # this bounded.
-    history = [{"role": m.role, "content": m.content} for m in req.messages]
+    # this bounded. Carry the OpenAI tool-call fields (tool_calls /
+    # tool_call_id / name) through verbatim when present — the upstream
+    # backends require the full round-trip to associate a tool result
+    # with the assistant call that requested it.
+    def _msg_to_dict(m: Message) -> dict:
+        d: dict = {"role": m.role, "content": m.content}
+        if m.tool_calls is not None:
+            d["tool_calls"] = m.tool_calls
+        if m.tool_call_id is not None:
+            d["tool_call_id"] = m.tool_call_id
+        if m.name is not None:
+            d["name"] = m.name
+        return d
+    history = [_msg_to_dict(m) for m in req.messages]
     messages = [{"role": "system", "content": system_prompt}] + history
 
     used_model = req.model or (
         os.environ.get("MLX_MODEL", backend) if backend == "mlx" else LLM_MODEL
     )
+
+    # Streaming + tools is not implemented. Buffering the entire generation
+    # and emitting a single final delta with tool_calls would work, but
+    # doubles the code path for a feature no current caller needs — the
+    # audit-agent (the only tools/* consumer) runs non-streaming. Refuse
+    # with 501 so a future caller doesn't silently get a stream that
+    # drops their tool calls on the floor.
+    if req.stream and req.tools:
+        raise HTTPException(
+            status_code=501,
+            detail="stream=true with tools is not implemented; "
+                   "set stream=false to use tool calling.",
+        )
 
     # ── Streaming branch (SSE) ───────────────────────────────────────────────
     # When the smart client asks for stream:true, push tokens as they're
@@ -618,10 +725,21 @@ def chat(request: Request, req: ChatRequest, user: str = Depends(_auth)):
     try:
         with slot(timeout=30.0):
             try:
-                answer = _infer_callable(
-                    messages, req.model, False,
-                    req.max_tokens or 2048, req.temperature or 0.1,
-                )
+                # Forward tools / tool_choice when present. _infer accepts
+                # them via kwargs so the legacy positional call site (and
+                # ha_chaos.py's _fake_infer, which uses the old positional
+                # signature) keep working unchanged when tools is None.
+                if req.tools:
+                    infer_result = _infer_callable(
+                        messages, req.model, False,
+                        req.max_tokens or 2048, req.temperature or 0.1,
+                        tools=req.tools, tool_choice=req.tool_choice,
+                    )
+                else:
+                    infer_result = _infer_callable(
+                        messages, req.model, False,
+                        req.max_tokens or 2048, req.temperature or 0.1,
+                    )
             except Exception as exc:
                 log.error(f"Inference error: {exc}", exc_info=True)
                 raise HTTPException(status_code=502,
@@ -633,6 +751,17 @@ def chat(request: Request, req: ChatRequest, user: str = Depends(_auth)):
             detail="Server is at capacity; retry shortly or via another node.",
             headers={"Retry-After": "5"},
         )
+
+    # Compatibility shim: ha_chaos.py monkey-patches _infer with a stub
+    # that returns a plain string. The real _infer now returns a dict.
+    # Normalise both shapes so the rest of the handler can assume dict.
+    if isinstance(infer_result, str):
+        infer_result = {"content": infer_result, "tool_calls": None}
+    elif not isinstance(infer_result, dict):
+        # Unknown shape — best-effort coerce to a content string.
+        infer_result = {"content": str(infer_result), "tool_calls": None}
+    answer = infer_result.get("content")
+    tool_calls = infer_result.get("tool_calls")
 
     latency = (time.monotonic() - t0) * 1000
     _write_audit(user, used_model, sources, latency, query_hash, req.matter_code or "")
@@ -652,13 +781,22 @@ def chat(request: Request, req: ChatRequest, user: str = Depends(_auth)):
         for c in (context_chunks or [])
     ]
 
+    # OpenAI envelope: when the model emitted tool_calls, finish_reason
+    # MUST be "tool_calls" and the message carries the tool_calls array.
+    # When it only emitted prose, finish_reason stays "stop" — identical
+    # to the pre-tools behaviour, so non-tools callers see no change.
+    message: dict = {"role": "assistant", "content": answer}
+    if tool_calls:
+        message["tool_calls"] = tool_calls
+    finish_reason = "tool_calls" if tool_calls else "stop"
+
     response = {
         "id": f"chatcmpl-{int(time.time())}",
         "object": "chat.completion",
         "model": used_model,
         "backend": backend,
-        "choices": [{"index": 0, "message": {"role": "assistant", "content": answer},
-                     "finish_reason": "stop"}],
+        "choices": [{"index": 0, "message": message,
+                     "finish_reason": finish_reason}],
         "usage": {"sources_retrieved": sources},
         "sources": citations,
         "safe_mode": safe_mode,
