@@ -7,9 +7,9 @@ Exposes a `router = APIRouter()` that api/__init__.py mounts via
 `app.include_router(router)`. Routes are mounted WITHOUT a prefix so paths
 remain identical to the monolith (`/admin/users`, `/admin/fleet/nodes`, …).
 
-The `/admin/compliance/snapshot` route is deliberately NOT here — it stays
-in api/__init__.py for PR-5 along with its compliance helpers and the
-sub-processor / telemetry constants. PR-4 broke the admin→compliance
+The `/admin/compliance/snapshot` route is deliberately NOT here — it lives
+in api/compliance.py (extracted in PR-5) along with its compliance helpers
+and the sub-processor / telemetry constants. PR-4 broke the admin→compliance
 handler-to-handler call by extracting `processing_record_body()` and
 `audit_verify_body()` into api/_shared.py so both call sites depend on
 shared bodies rather than the route handlers.
@@ -32,15 +32,16 @@ from pydantic import BaseModel, Field
 # its `from api.admin import …` line, so this resolves cleanly.
 from api import limiter
 from api._shared import (
+    _BACKUP_ATTESTATIONS_FILE,
+    _TRAINING_RECORDS_FILE,
     _admin_auth,
     audit_verify_body,
     processing_record_body,
 )
+from config import NODE_ID as _NODE_ID
 from config import (
-    BASE_DIR,
     reload_users,
 )
-from config import NODE_ID as _NODE_ID
 from manage_users import (
     add_user as _add_user,
 )
@@ -119,7 +120,7 @@ def processing_record(key: str = Depends(_admin_auth)):
     if BACKEND or QDRANT_URL change, the record updates automatically.
 
     Thin wrapper around `processing_record_body()` in api/_shared.py so the
-    /admin/compliance/snapshot route (still in api/__init__.py) can call
+    /admin/compliance/snapshot route (api/compliance.py) can call
     the same body without going through this auth'd handler."""
     return processing_record_body()
 
@@ -129,7 +130,7 @@ def audit_verify(key: str = Depends(_admin_auth)):
     """Verify the HMAC chain integrity of audit.log. Returns TAMPERED if the chain is broken.
 
     Thin wrapper around `audit_verify_body()` in api/_shared.py so the
-    /admin/compliance/snapshot route (still in api/__init__.py) and the
+    /admin/compliance/snapshot route (api/compliance.py) and the
     /admin/fleet/audit-verify aggregator can call the same body without
     going through this auth'd handler."""
     return audit_verify_body()
@@ -139,9 +140,9 @@ def audit_verify(key: str = Depends(_admin_auth)):
 # Light file-backed CRUD. Each record: {id, user, topic, completed_at, notes}.
 # Auditors want to see that users are trained on AI-output review, GDPR
 # fundamentals, incident reporting, etc. The compliance snapshot summarises;
-# these endpoints let the DPO maintain the underlying records.
-_TRAINING_RECORDS_FILE = BASE_DIR / "training_records.json"
-_BACKUP_ATTESTATIONS_FILE = BASE_DIR / "backup_attestations.json"
+# these endpoints let the DPO maintain the underlying records. The backing
+# files (`_TRAINING_RECORDS_FILE`, `_BACKUP_ATTESTATIONS_FILE`) are defined in
+# api/_shared.py so api/compliance.py reads from the same paths this writes.
 
 
 def _load_training_records() -> list:

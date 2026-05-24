@@ -35,6 +35,7 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from config import (
+    BASE_DIR,
     BILLING_LOG,
     pseudonymise_user,
     validate_key,
@@ -603,3 +604,13 @@ def audit_verify_body() -> dict:
                 "reason": "tail truncated: chain head does not match .audit_chain"}
 
     return {"status": "ok", "entries": len(live_lines), "node_id": _NODE_ID}
+
+
+# ── Shared compliance-record file paths ───────────────────────────────────────
+# Backing files for the ISO-27001 training-records register and backup-restore
+# attestation log. CRUD lives in api/admin.py; the read-only aggregation that
+# feeds the DPO compliance snapshot lives in api/compliance.py. Both modules
+# import these constants from here so the file path can never diverge between
+# writer and reader.
+_TRAINING_RECORDS_FILE = BASE_DIR / "training_records.json"
+_BACKUP_ATTESTATIONS_FILE = BASE_DIR / "backup_attestations.json"
