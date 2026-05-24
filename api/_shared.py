@@ -10,6 +10,14 @@ Notes:
   * `_ChainLock` accesses `_CHAIN_LOCK_FD` lazily (via module-global
     indirection) so importers don't pay for a file open they don't need;
     the startup event populates the fd before any writer reaches it.
+  * `processing_record_body()` and `audit_verify_body()` are auth-free
+    pure functions shared by the `/admin/processing-record` and
+    `/admin/audit-verify` route handlers (now in `api/admin.py`) AND the
+    `/admin/compliance/snapshot` route still in `api/__init__.py`. PR-4
+    extracted them so the cross-route handler call (compliance snapshot
+    used to call `processing_record(key=key)` and `audit_verify(key=key)`
+    directly) no longer creates an admin→compliance coupling — both call
+    sites go through these bodies instead.
 """
 from __future__ import annotations
 
@@ -358,3 +366,240 @@ def _admin_auth(creds: HTTPAuthorizationCredentials = Depends(_admin_security)):
     if not admin_key or not _hmac_mod.compare_digest(creds.credentials, admin_key):
         raise HTTPException(status_code=403, detail="Invalid admin key")
     return creds.credentials
+
+
+# ── Pure-body helpers for cross-route reuse (PR-4) ───────────────────────────
+# These hold the logic that used to live inside the /admin/processing-record
+# and /admin/audit-verify route handlers. Both the admin routes (now in
+# api/admin.py) and the /admin/compliance/snapshot route (still in
+# api/__init__.py, queued for PR-5) call these. Extracting them broke the
+# admin→compliance handler-to-handler call that PR-4 would otherwise have
+# regressed (snapshot used to do `processing_record(key=key)` /
+# `audit_verify(key=key)` directly against the route handlers).
+#
+# These functions perform NO auth — the route wrappers do that via
+# `Depends(_admin_auth)`. The compliance snapshot route is itself behind
+# `_admin_auth`, so calling these unconditionally from there is safe.
+
+def processing_record_body() -> dict:
+    """Records of Processing Activities (GDPR art. 30, UAE PDPL art. 21,
+    KSA PDPL art. 31). Returned as JSON so a DPO can pipe it into their
+    register on demand. Reflects the deployment's actual configuration —
+    if BACKEND or QDRANT_URL change, the record updates automatically."""
+    deployment_id = os.environ.get("LOCALLYAI_DEPLOYMENT_ID", "locallyai-prod")
+    retention_days = int(os.environ.get("LOCALLYAI_AUDIT_RETENTION_DAYS", "365"))
+    qdrant_url = os.environ.get("QDRANT_URL", "")
+    qdrant_urls = [u.strip() for u in os.environ.get("QDRANT_URLS", "").split(",") if u.strip()]
+    ha_enabled = os.environ.get("LOCALLYAI_HA", "").strip() in ("1", "true", "yes")
+    shared_dir = os.environ.get("LOCALLYAI_SHARED_DIR", "")
+    try:
+        import fleet as _fleet
+        active_nodes = _fleet.active_nodes()
+    except Exception:
+        active_nodes = []
+    ha_block = {
+        "enabled": ha_enabled,
+        "active_nodes": [n.get("node_id") for n in active_nodes],
+        "shared_storage_path": shared_dir or "(single-node; SHARED_DIR == BASE_DIR)",
+        "qdrant_topology": (
+            f"{len(qdrant_urls)}-node cluster (replication_factor=2, write_consistency=2)"
+            if ha_enabled and len(qdrant_urls) >= 2
+            else "single Qdrant" + (f" at {qdrant_url}" if qdrant_url else " (embedded)")
+        ),
+        "audit_chain_model": "per-node (each node maintains its own HMAC chain; "
+                             "fleet-wide verification via /admin/fleet/audit-verify)",
+        "failover_model": (
+            "Smart client (worker-ui) with mtime-cached health checks every 5s; "
+            "in-flight requests retry on the next healthy node carrying the same "
+            "client_request_id; per-node 120s idempotency cache prevents double "
+            "billing or double audit when the first node actually completed."
+        ),
+        "sync_layer": "Syncthing replicates SHARED_DIR/{users.json,erasure.log,fleet.json} "
+                      "between nodes; conflict files quarantined to SHARED_DIR/conflicts/ for "
+                      "operator review (no silent merge of credential or erasure data).",
+    }
+    # Pseudonymisation key-material findings (GDPR Art. 4(5) / Art. 32,
+    # ISO 27001 A.8.24, UAE PDPL art. 8(2), KSA PDPL art. 19). Surfaced
+    # so a DPO sees the live posture and can act on warns.
+    try:
+        from config import current_salt_era, known_salt_eras, verify_key_material
+        key_findings = verify_key_material()
+        pseudonymity = {
+            "current_salt_era":   current_salt_era(),
+            "known_salt_eras":    known_salt_eras(),
+            "key_material_state": key_findings,
+        }
+    except Exception as exc:
+        pseudonymity = {"error": str(exc)}
+
+    # Region-aware regulatory framing. Every entry below also surfaces in
+    # audit/billing logs as `data_region`. KSA fleets foreground PDPL +
+    # ISO 27001; UK fleets foreground UK GDPR + DPA 2018 + ISO 27001. The
+    # full cross-jurisdiction list still appears under
+    # `regulations_acknowledged` for DPOs operating across markets, but the
+    # `applicable_regulations` field tells an auditor which framework
+    # *governs* this specific deployment.
+    from config import DATA_REGION as _data_region
+    if _data_region == "KSA":
+        applicable = [
+            "KSA Personal Data Protection Law (Royal Decree M/19, 2023)",
+            "ISO/IEC 27001:2022",
+        ]
+        breach_clause = "PDPL Art. 31 (notification to SDAIA + data subjects)"
+        erasure_basis = "manage_users.py erase <name>  (PDPL art. 18 / UAE PDPL art. 14)"
+        lawful_basis_user = "PDPL art. 5(1)(b) contract / employment relationship"
+        lawful_basis_audit = "PDPL art. 5(1)(c) legal obligation (ISO 27001 A.8.15)"
+        lawful_basis_billing = "PDPL art. 5(1)(b) contract (invoicing)"
+        lawful_basis_corpus = "PDPL art. 5(1)(b)/(f) controller's own data"
+    else:
+        applicable = [
+            "UK GDPR + DPA 2018",
+            "EU GDPR (Regulation 2016/679)",
+            "ISO/IEC 27001:2022",
+        ]
+        breach_clause = "GDPR Art. 33 (notification to ICO + data subjects)"
+        erasure_basis = "manage_users.py erase <name>  (GDPR art. 17 / UAE PDPL art. 14 / KSA PDPL art. 18)"
+        lawful_basis_user = "art.6(1)(b) contract / employment"
+        lawful_basis_audit = "art.6(1)(c) legal obligation (ISO 27001 A.8.15)"
+        lawful_basis_billing = "art.6(1)(b) contract (invoicing)"
+        lawful_basis_corpus = "art.6(1)(b)/(f) controller's own data"
+
+    return {
+        "version": "1.3",
+        "controller": {
+            "deployment_id": deployment_id,
+            "data_region":   _data_region,
+            "note": "The deploying organisation is the controller; LocallyAI is on-prem software.",
+        },
+        "data_region": _data_region,
+        "applicable_regulations": applicable,
+        "breach_notification": breach_clause,
+        "high_availability": ha_block,
+        "pseudonymity": pseudonymity,
+        "purposes": [
+            "Retrieval-augmented question answering against the controller's own corpus",
+            "Compliance auditing of model use",
+            "Per-user usage measurement for internal billing",
+        ],
+        "data_categories": [
+            {"name": "user_identifier", "lawful_basis": lawful_basis_user,
+             "storage": "users.json (chmod 600)"},
+            {"name": "audit_metadata",
+             "fields": ["pseudonymised user hash", "data region", "model id",
+                        "source-chunk count", "latency", "SHA-256 query hash"],
+             "lawful_basis": lawful_basis_audit,
+             "storage": f"logs/audit.log (chmod 640, HMAC-chained, {retention_days}d retention)"},
+            {"name": "billing_metadata",
+             "fields": ["real user name", "model", "latency", "matter code", "data region"],
+             "lawful_basis": lawful_basis_billing,
+             "storage": f"logs/billing.log (chmod 640, {retention_days}d retention)"},
+            {"name": "document_corpus",
+             "lawful_basis": lawful_basis_corpus,
+             "storage": ("Qdrant server " + qdrant_url) if qdrant_url else "embedded Qdrant under storage/",
+             "note": "Vector store + BM25 index of documents the controller chose to ingest."},
+        ],
+        "recipients": [
+            "None. This deployment runs entirely on the controller's hardware. "
+            "No outbound API calls. No subprocessor agreements required.",
+        ],
+        "international_transfers": (
+            "None. Data stays on the deployment host (data_region=" + _data_region +
+            "). Verifiable via firewall logs at the deployment site — no outbound API "
+            "calls are made by LocallyAI after install. PDPL Art. 29 / GDPR Ch. V compliant."
+        ),
+        "retention": {
+            "audit_log_days": retention_days,
+            "billing_log_days": retention_days,
+            "users_json": "until erasure request",
+            "vector_store": "until controller deletes documents from data/",
+        },
+        "security_measures": [
+            "TLS 1.2+ in transit (RSA-4096 self-signed cert; trusted in OS keychain)",
+            "FileVault / BitLocker at-rest encryption (verified by audit_install.sh)",
+            "Per-user API keys, IP-based lockout, per-key rate limiting",
+            "HMAC-chained audit log (ISO 27001 A.8.15 tamper-evidence)",
+            "Pseudonymisation of user identifiers in audit log "
+              + ("(PDPL art. 19)" if _data_region == "KSA" else "(GDPR art. 25)"),
+            f"Sentinel breach detector on logs/security.log ({breach_clause} readiness)",
+        ],
+        "data_subject_rights": {
+            "erasure":   erasure_basis,
+            "access":    "/admin/users + /v1/billing/<name> (admin endpoints behind admin key)",
+            "rectification": "manage_users.py rotate <name>  (issues a fresh credential)",
+        },
+        "regulations_acknowledged": [
+            "EU GDPR (Regulation 2016/679)",
+            "UK GDPR + DPA 2018",
+            "ISO/IEC 27001:2022",
+            "UAE PDPL (Federal Decree-Law 45/2021)",
+            "DIFC Data Protection Law DIFC Law No. 5 of 2020",
+            "ADGM Data Protection Regulations 2021",
+            "KSA Personal Data Protection Law (1 Royal Decree M/19, 2023)",
+        ],
+    }
+
+
+def audit_verify_body() -> dict:
+    """Verify the HMAC chain integrity of audit.log. Returns TAMPERED if the chain is broken.
+
+    Replays rotated archives (audit-YYYY-MM-DD.log.gz) in chronological order
+    before the live log so the chain head preserved across rotations by the
+    sentinel still validates — without that, the first post-rotation entry
+    always looks TAMPERED to a verifier that only sees the truncated live log.
+
+    Tail check: after replaying everything, the resulting head must equal
+    .audit_chain. If it doesn't, entries were deleted from the tail (or the
+    live log was wiped) — TAMPERED, even though no individual line failed.
+    """
+    if not _AUDIT_HMAC_KEY:
+        return {"status": "skipped", "reason": "LOCALLYAI_AUDIT_HMAC_KEY not configured"}
+
+    import gzip
+
+    def _verify_lines(lines, prev):
+        for i, line in enumerate(lines, start=1):
+            try:
+                entry = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            stored = entry.pop("_chain_hmac", "")
+            if not stored:
+                continue
+            expected = _chain_hmac(json.dumps(entry, sort_keys=True), prev)
+            if not _hmac_mod.compare_digest(stored, expected):
+                return prev, i, False
+            prev = stored
+        return prev, 0, True
+
+    # Snapshot live log + chain head atomically with respect to _write_audit so
+    # the tail check below doesn't race a concurrent writer (writer appends to
+    # audit.log AND updates .audit_chain inside _chain_lock — without taking
+    # the same lock here, we could see audit.log post-write but .audit_chain
+    # pre-write and falsely report TAMPERED). Archives are immutable once
+    # rotated so they don't need the lock.
+    with _chain_lock:
+        live_text = AUDIT_LOG.read_text(encoding="utf-8", errors="replace") if AUDIT_LOG.exists() else ""
+        expected_head = _prev_hash()
+
+    prev = "0" * 64
+    for arc in sorted(LOG_DIR.glob("audit-*.log.gz")):
+        try:
+            with gzip.open(arc, "rt", encoding="utf-8", errors="replace") as f:
+                arc_lines = f.read().splitlines()
+        except OSError as e:
+            return {"status": "TAMPERED", "source": arc.name,
+                    "reason": f"unreadable archive: {e}"}
+        prev, broken, ok = _verify_lines(arc_lines, prev)
+        if not ok:
+            return {"status": "TAMPERED", "source": arc.name, "broken_at_line": broken}
+
+    live_lines = live_text.splitlines()
+    prev, broken, ok = _verify_lines(live_lines, prev)
+    if not ok:
+        return {"status": "TAMPERED", "source": "audit.log", "broken_at_line": broken}
+
+    if expected_head and expected_head != "0" * 64 and prev != expected_head:
+        return {"status": "TAMPERED", "source": "audit.log",
+                "reason": "tail truncated: chain head does not match .audit_chain"}
+
+    return {"status": "ok", "entries": len(live_lines), "node_id": _NODE_ID}

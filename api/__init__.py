@@ -30,13 +30,11 @@ import hashlib
 import hmac as _hmac_mod
 import json
 import logging
-import time
 from datetime import UTC
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
-from pydantic import BaseModel, Field
+from fastapi.responses import HTMLResponse, JSONResponse
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -46,17 +44,16 @@ from api import _shared
 from api._shared import (
     _AUDIT_HMAC_KEY,
     AUDIT_LOG,
-    LOG_DIR,
     SECURITY_LOG,
     _admin_auth,
-    _chain_hmac,
-    _chain_lock,
     _open_chain_lock_fd,
-    _prev_hash,
+    audit_verify_body,
+    processing_record_body,
 )
 from api._shared import _BILLING_CHAIN_STATE_FILE as _BILLING_CHAIN_STATE_FILE  # noqa: F401
 from api._shared import _CHAIN_LOCK_FILE as _CHAIN_LOCK_FILE  # noqa: F401
 from api._shared import _CHAIN_STATE_FILE as _CHAIN_STATE_FILE  # noqa: F401
+from api._shared import LOG_DIR as LOG_DIR  # noqa: F401  # external (sentinel) attr compat
 
 # Pure re-exports (used only by external importers — see module docstring).
 # `_client_ip` and `_write_security_log` are added in PR-2: they were
@@ -74,10 +71,13 @@ from api._shared import _atomic_write_chain_state as _atomic_write_chain_state  
 # reach for `api._auth` / `api._write_audit` / `api._CHAIN_STATE_FILE`.
 from api._shared import _auth as _auth  # noqa: F401
 from api._shared import _billing_prev_hash as _billing_prev_hash  # noqa: F401
+from api._shared import _chain_hmac as _chain_hmac  # noqa: F401  # external (sentinel) attr compat
+from api._shared import _chain_lock as _chain_lock  # noqa: F401  # external (sentinel) attr compat
 from api._shared import _ChainLock as _ChainLock  # noqa: F401
 from api._shared import _client_ip as _client_ip  # noqa: F401
 from api._shared import _is_locked as _is_locked  # noqa: F401
 from api._shared import _key_fingerprint as _key_fingerprint  # noqa: F401
+from api._shared import _prev_hash as _prev_hash  # noqa: F401  # external (sentinel) attr compat
 from api._shared import _record_failure as _record_failure  # noqa: F401
 from api._shared import _record_success as _record_success  # noqa: F401
 from api._shared import _write_audit as _write_audit  # noqa: F401
@@ -89,22 +89,9 @@ from config import (
     BASE_DIR,
     BILLING_LOG,
     COLLECTION_NAME,
-    reload_users,
 )
 from config import NODE_ID as _NODE_ID
 from ingest import ensure_collection
-from manage_users import (
-    add_user as _add_user,
-)
-from manage_users import (
-    list_users as _list_users,
-)
-from manage_users import (
-    remove_user as _remove_user,
-)
-from manage_users import (
-    rotate_key as _rotate_key,
-)
 from monitoring.monitor import router as monitor_router
 from watchdog.diagnostician import router as diagnostician_router
 
@@ -380,282 +367,17 @@ from api.documents import router as _documents_router  # noqa: E402
 app.include_router(_documents_router)
 
 
-# ── Admin endpoints ────────────────────────────────────────────────────────────
-@app.post("/admin/reload-users")
-def reload_users_endpoint(key: str = Depends(_admin_auth)):
-    """Hot-reload users.json without restarting. Call after manage_users.py changes."""
-    count = reload_users()
-    return {"status": "ok", "users_loaded": count}
+# NOTE (PR-4): admin endpoints — /admin/reload-users, /admin/users CRUD,
+# /admin/processing-record, /admin/audit-verify, /admin/training-records,
+# /admin/backup-attestations, /admin/fleet/*, /admin/updates*,
+# /admin/models*, /admin/installers* — moved to api/admin.py and are
+# mounted via app.include_router below. The pure-body helpers
+# `processing_record_body()` and `audit_verify_body()` moved to
+# api/_shared.py so the /admin/compliance/snapshot route below can call
+# them directly instead of doing handler-to-handler calls into admin.py.
+from api.admin import router as _admin_router  # noqa: E402
 
-
-class _UserCreateRequest(BaseModel):
-    name: str = Field(..., min_length=1, max_length=64)
-
-
-@app.get("/admin/users")
-def admin_list_users(key: str = Depends(_admin_auth)):
-    """Return the list of provisioned user names. Keys are NEVER returned —
-    they exist only at creation time and after rotation."""
-    return {"users": _list_users()}
-
-
-@app.post("/admin/users")
-def admin_create_user(req: _UserCreateRequest, key: str = Depends(_admin_auth)):
-    """Create a user and return the freshly minted API key. The key is shown
-    once and never again — the caller is responsible for handing it to the user
-    over a secure channel."""
-    try:
-        new_key = _add_user(req.name)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    reload_users()
-    return {"name": req.name, "api_key": new_key, "warning": "Store this key securely. It will not be shown again."}
-
-
-@app.delete("/admin/users/{name}")
-def admin_remove_user(name: str, key: str = Depends(_admin_auth)):
-    try:
-        _remove_user(name)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    reload_users()
-    return {"removed": name}
-
-
-@app.post("/admin/users/{name}/rotate")
-def admin_rotate_key(name: str, key: str = Depends(_admin_auth)):
-    try:
-        new_key = _rotate_key(name)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    reload_users()
-    return {"name": name, "api_key": new_key, "warning": "Store this key securely. It will not be shown again."}
-
-
-@app.get("/admin/processing-record")
-def processing_record(key: str = Depends(_admin_auth)):
-    """Records of Processing Activities (GDPR art. 30, UAE PDPL art. 21,
-    KSA PDPL art. 31). Returned as JSON so a DPO can pipe it into their
-    register on demand. Reflects the deployment's actual configuration —
-    if BACKEND or QDRANT_URL change, the record updates automatically."""
-    deployment_id = os.environ.get("LOCALLYAI_DEPLOYMENT_ID", "locallyai-prod")
-    retention_days = int(os.environ.get("LOCALLYAI_AUDIT_RETENTION_DAYS", "365"))
-    qdrant_url = os.environ.get("QDRANT_URL", "")
-    qdrant_urls = [u.strip() for u in os.environ.get("QDRANT_URLS", "").split(",") if u.strip()]
-    ha_enabled = os.environ.get("LOCALLYAI_HA", "").strip() in ("1", "true", "yes")
-    shared_dir = os.environ.get("LOCALLYAI_SHARED_DIR", "")
-    try:
-        import fleet as _fleet
-        active_nodes = _fleet.active_nodes()
-    except Exception:
-        active_nodes = []
-    ha_block = {
-        "enabled": ha_enabled,
-        "active_nodes": [n.get("node_id") for n in active_nodes],
-        "shared_storage_path": shared_dir or "(single-node; SHARED_DIR == BASE_DIR)",
-        "qdrant_topology": (
-            f"{len(qdrant_urls)}-node cluster (replication_factor=2, write_consistency=2)"
-            if ha_enabled and len(qdrant_urls) >= 2
-            else "single Qdrant" + (f" at {qdrant_url}" if qdrant_url else " (embedded)")
-        ),
-        "audit_chain_model": "per-node (each node maintains its own HMAC chain; "
-                             "fleet-wide verification via /admin/fleet/audit-verify)",
-        "failover_model": (
-            "Smart client (worker-ui) with mtime-cached health checks every 5s; "
-            "in-flight requests retry on the next healthy node carrying the same "
-            "client_request_id; per-node 120s idempotency cache prevents double "
-            "billing or double audit when the first node actually completed."
-        ),
-        "sync_layer": "Syncthing replicates SHARED_DIR/{users.json,erasure.log,fleet.json} "
-                      "between nodes; conflict files quarantined to SHARED_DIR/conflicts/ for "
-                      "operator review (no silent merge of credential or erasure data).",
-    }
-    # Pseudonymisation key-material findings (GDPR Art. 4(5) / Art. 32,
-    # ISO 27001 A.8.24, UAE PDPL art. 8(2), KSA PDPL art. 19). Surfaced
-    # so a DPO sees the live posture and can act on warns.
-    try:
-        from config import current_salt_era, known_salt_eras, verify_key_material
-        key_findings = verify_key_material()
-        pseudonymity = {
-            "current_salt_era":   current_salt_era(),
-            "known_salt_eras":    known_salt_eras(),
-            "key_material_state": key_findings,
-        }
-    except Exception as exc:
-        pseudonymity = {"error": str(exc)}
-
-    # Region-aware regulatory framing. Every entry below also surfaces in
-    # audit/billing logs as `data_region`. KSA fleets foreground PDPL +
-    # ISO 27001; UK fleets foreground UK GDPR + DPA 2018 + ISO 27001. The
-    # full cross-jurisdiction list still appears under
-    # `regulations_acknowledged` for DPOs operating across markets, but the
-    # `applicable_regulations` field tells an auditor which framework
-    # *governs* this specific deployment.
-    from config import DATA_REGION as _data_region
-    if _data_region == "KSA":
-        applicable = [
-            "KSA Personal Data Protection Law (Royal Decree M/19, 2023)",
-            "ISO/IEC 27001:2022",
-        ]
-        breach_clause = "PDPL Art. 31 (notification to SDAIA + data subjects)"
-        erasure_basis = "manage_users.py erase <name>  (PDPL art. 18 / UAE PDPL art. 14)"
-        lawful_basis_user = "PDPL art. 5(1)(b) contract / employment relationship"
-        lawful_basis_audit = "PDPL art. 5(1)(c) legal obligation (ISO 27001 A.8.15)"
-        lawful_basis_billing = "PDPL art. 5(1)(b) contract (invoicing)"
-        lawful_basis_corpus = "PDPL art. 5(1)(b)/(f) controller's own data"
-    else:
-        applicable = [
-            "UK GDPR + DPA 2018",
-            "EU GDPR (Regulation 2016/679)",
-            "ISO/IEC 27001:2022",
-        ]
-        breach_clause = "GDPR Art. 33 (notification to ICO + data subjects)"
-        erasure_basis = "manage_users.py erase <name>  (GDPR art. 17 / UAE PDPL art. 14 / KSA PDPL art. 18)"
-        lawful_basis_user = "art.6(1)(b) contract / employment"
-        lawful_basis_audit = "art.6(1)(c) legal obligation (ISO 27001 A.8.15)"
-        lawful_basis_billing = "art.6(1)(b) contract (invoicing)"
-        lawful_basis_corpus = "art.6(1)(b)/(f) controller's own data"
-
-    return {
-        "version": "1.3",
-        "controller": {
-            "deployment_id": deployment_id,
-            "data_region":   _data_region,
-            "note": "The deploying organisation is the controller; LocallyAI is on-prem software.",
-        },
-        "data_region": _data_region,
-        "applicable_regulations": applicable,
-        "breach_notification": breach_clause,
-        "high_availability": ha_block,
-        "pseudonymity": pseudonymity,
-        "purposes": [
-            "Retrieval-augmented question answering against the controller's own corpus",
-            "Compliance auditing of model use",
-            "Per-user usage measurement for internal billing",
-        ],
-        "data_categories": [
-            {"name": "user_identifier", "lawful_basis": lawful_basis_user,
-             "storage": "users.json (chmod 600)"},
-            {"name": "audit_metadata",
-             "fields": ["pseudonymised user hash", "data region", "model id",
-                        "source-chunk count", "latency", "SHA-256 query hash"],
-             "lawful_basis": lawful_basis_audit,
-             "storage": f"logs/audit.log (chmod 640, HMAC-chained, {retention_days}d retention)"},
-            {"name": "billing_metadata",
-             "fields": ["real user name", "model", "latency", "matter code", "data region"],
-             "lawful_basis": lawful_basis_billing,
-             "storage": f"logs/billing.log (chmod 640, {retention_days}d retention)"},
-            {"name": "document_corpus",
-             "lawful_basis": lawful_basis_corpus,
-             "storage": ("Qdrant server " + qdrant_url) if qdrant_url else "embedded Qdrant under storage/",
-             "note": "Vector store + BM25 index of documents the controller chose to ingest."},
-        ],
-        "recipients": [
-            "None. This deployment runs entirely on the controller's hardware. "
-            "No outbound API calls. No subprocessor agreements required.",
-        ],
-        "international_transfers": (
-            "None. Data stays on the deployment host (data_region=" + _data_region +
-            "). Verifiable via firewall logs at the deployment site — no outbound API "
-            "calls are made by LocallyAI after install. PDPL Art. 29 / GDPR Ch. V compliant."
-        ),
-        "retention": {
-            "audit_log_days": retention_days,
-            "billing_log_days": retention_days,
-            "users_json": "until erasure request",
-            "vector_store": "until controller deletes documents from data/",
-        },
-        "security_measures": [
-            "TLS 1.2+ in transit (RSA-4096 self-signed cert; trusted in OS keychain)",
-            "FileVault / BitLocker at-rest encryption (verified by audit_install.sh)",
-            "Per-user API keys, IP-based lockout, per-key rate limiting",
-            "HMAC-chained audit log (ISO 27001 A.8.15 tamper-evidence)",
-            "Pseudonymisation of user identifiers in audit log "
-              + ("(PDPL art. 19)" if _data_region == "KSA" else "(GDPR art. 25)"),
-            f"Sentinel breach detector on logs/security.log ({breach_clause} readiness)",
-        ],
-        "data_subject_rights": {
-            "erasure":   erasure_basis,
-            "access":    "/admin/users + /v1/billing/<name> (admin endpoints behind admin key)",
-            "rectification": "manage_users.py rotate <name>  (issues a fresh credential)",
-        },
-        "regulations_acknowledged": [
-            "EU GDPR (Regulation 2016/679)",
-            "UK GDPR + DPA 2018",
-            "ISO/IEC 27001:2022",
-            "UAE PDPL (Federal Decree-Law 45/2021)",
-            "DIFC Data Protection Law DIFC Law No. 5 of 2020",
-            "ADGM Data Protection Regulations 2021",
-            "KSA Personal Data Protection Law (1 Royal Decree M/19, 2023)",
-        ],
-    }
-
-
-@app.get("/admin/audit-verify")
-def audit_verify(key: str = Depends(_admin_auth)):
-    """Verify the HMAC chain integrity of audit.log. Returns TAMPERED if the chain is broken.
-
-    Replays rotated archives (audit-YYYY-MM-DD.log.gz) in chronological order
-    before the live log so the chain head preserved across rotations by the
-    sentinel still validates — without that, the first post-rotation entry
-    always looks TAMPERED to a verifier that only sees the truncated live log.
-
-    Tail check: after replaying everything, the resulting head must equal
-    .audit_chain. If it doesn't, entries were deleted from the tail (or the
-    live log was wiped) — TAMPERED, even though no individual line failed.
-    """
-    if not _AUDIT_HMAC_KEY:
-        return {"status": "skipped", "reason": "LOCALLYAI_AUDIT_HMAC_KEY not configured"}
-
-    import gzip
-
-    def _verify_lines(lines, prev):
-        for i, line in enumerate(lines, start=1):
-            try:
-                entry = json.loads(line)
-            except (json.JSONDecodeError, ValueError):
-                continue
-            stored = entry.pop("_chain_hmac", "")
-            if not stored:
-                continue
-            expected = _chain_hmac(json.dumps(entry, sort_keys=True), prev)
-            if not _hmac_mod.compare_digest(stored, expected):
-                return prev, i, False
-            prev = stored
-        return prev, 0, True
-
-    # Snapshot live log + chain head atomically with respect to _write_audit so
-    # the tail check below doesn't race a concurrent writer (writer appends to
-    # audit.log AND updates .audit_chain inside _chain_lock — without taking
-    # the same lock here, we could see audit.log post-write but .audit_chain
-    # pre-write and falsely report TAMPERED). Archives are immutable once
-    # rotated so they don't need the lock.
-    with _chain_lock:
-        live_text = AUDIT_LOG.read_text(encoding="utf-8", errors="replace") if AUDIT_LOG.exists() else ""
-        expected_head = _prev_hash()
-
-    prev = "0" * 64
-    for arc in sorted(LOG_DIR.glob("audit-*.log.gz")):
-        try:
-            with gzip.open(arc, "rt", encoding="utf-8", errors="replace") as f:
-                arc_lines = f.read().splitlines()
-        except OSError as e:
-            return {"status": "TAMPERED", "source": arc.name,
-                    "reason": f"unreadable archive: {e}"}
-        prev, broken, ok = _verify_lines(arc_lines, prev)
-        if not ok:
-            return {"status": "TAMPERED", "source": arc.name, "broken_at_line": broken}
-
-    live_lines = live_text.splitlines()
-    prev, broken, ok = _verify_lines(live_lines, prev)
-    if not ok:
-        return {"status": "TAMPERED", "source": "audit.log", "broken_at_line": broken}
-
-    if expected_head and expected_head != "0" * 64 and prev != expected_head:
-        return {"status": "TAMPERED", "source": "audit.log",
-                "reason": "tail truncated: chain head does not match .audit_chain"}
-
-    return {"status": "ok", "entries": len(live_lines), "node_id": _NODE_ID}
+app.include_router(_admin_router)
 
 
 # ── DPO compliance snapshot ────────────────────────────────────────────────
@@ -1042,7 +764,7 @@ def compliance_snapshot(format: str = "json", key: str = Depends(_admin_auth)):
         "version": _release_version,
     }
 
-    ropa = processing_record(key=key)
+    ropa = processing_record_body()
     dpia = _compliance_dpia(ropa)
     dpia["generated_at"] = _dt.now(UTC).isoformat()
     bundle = {
@@ -1051,7 +773,7 @@ def compliance_snapshot(format: str = "json", key: str = Depends(_admin_auth)):
         "deployment": deployment,
         "ropa": ropa,
         "dpia": dpia,
-        "audit_chain": audit_verify(key=key),
+        "audit_chain": audit_verify_body(),
         "audit_log_sample": _compliance_audit_log_sample(30),
         "key_material": __import__("config").verify_key_material(),
         "sub_processors": _COMPLIANCE_SUB_PROCESSORS,
@@ -1351,468 +1073,15 @@ def _render_compliance_snapshot_html(bundle: dict) -> str:
 </body></html>"""
 
 
-# ── Training records (ISO 27001 A.6.3 information-security awareness) ──────
-# Light file-backed CRUD. Each record: {id, user, topic, completed_at, notes}.
-# Auditors want to see that users are trained on AI-output review, GDPR
-# fundamentals, incident reporting, etc. The compliance snapshot summarises;
-# these endpoints let the DPO maintain the underlying records.
-
-def _load_training_records() -> list:
-    if not _TRAINING_RECORDS_FILE.exists():
-        return []
-    try:
-        d = json.loads(_TRAINING_RECORDS_FILE.read_text(encoding="utf-8"))
-        return d if isinstance(d, list) else []
-    except Exception:
-        return []
-
-
-def _save_training_records(records: list) -> None:
-    tmp = _TRAINING_RECORDS_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(records, indent=2), encoding="utf-8")
-    tmp.replace(_TRAINING_RECORDS_FILE)
-    try:
-        os.chmod(_TRAINING_RECORDS_FILE, 0o640)
-    except OSError:
-        pass
-
-
-@app.get("/admin/training-records")
-def list_training_records(key: str = Depends(_admin_auth)):
-    return {"records": _load_training_records()}
-
-
-@app.post("/admin/training-records")
-def add_training_record(body: dict, key: str = Depends(_admin_auth)):
-    from datetime import datetime as _dt
-    user = (body.get("user") or "").strip()
-    topic = (body.get("topic") or "").strip()
-    notes = (body.get("notes") or "").strip()
-    completed_at = (body.get("completed_at") or "").strip()
-    if not user or not topic:
-        raise HTTPException(status_code=400, detail="user and topic are required")
-    if not completed_at:
-        completed_at = _dt.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    records = _load_training_records()
-    next_id = (max((r.get("id", 0) for r in records), default=0)) + 1
-    record = {"id": next_id, "user": user, "topic": topic,
-              "completed_at": completed_at, "notes": notes}
-    records.append(record)
-    _save_training_records(records)
-    return {"record": record}
-
-
-@app.delete("/admin/training-records/{record_id}")
-def delete_training_record(record_id: int, key: str = Depends(_admin_auth)):
-    records = _load_training_records()
-    new_records = [r for r in records if r.get("id") != record_id]
-    if len(new_records) == len(records):
-        raise HTTPException(status_code=404, detail="training record not found")
-    _save_training_records(new_records)
-    return {"deleted": True, "id": record_id}
-
-
-# ── Backup test attestations (ISO 27001 A.8.13 / A.8.14) ───────────────────
-# Operator records each successful restore-from-backup test. The compliance
-# snapshot reports the most recent 5; auditors want to see that backups are
-# tested (not just configured), and the cadence.
-
-def _load_backup_attestations() -> list:
-    if not _BACKUP_ATTESTATIONS_FILE.exists():
-        return []
-    try:
-        d = json.loads(_BACKUP_ATTESTATIONS_FILE.read_text(encoding="utf-8"))
-        return d if isinstance(d, list) else []
-    except Exception:
-        return []
-
-
-def _save_backup_attestations(records: list) -> None:
-    tmp = _BACKUP_ATTESTATIONS_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(records, indent=2), encoding="utf-8")
-    tmp.replace(_BACKUP_ATTESTATIONS_FILE)
-    try:
-        os.chmod(_BACKUP_ATTESTATIONS_FILE, 0o640)
-    except OSError:
-        pass
-
-
-@app.get("/admin/backup-attestations")
-def list_backup_attestations(key: str = Depends(_admin_auth)):
-    return {"records": _load_backup_attestations()}
-
-
-@app.post("/admin/backup-attestations")
-def add_backup_attestation(body: dict, key: str = Depends(_admin_auth)):
-    from datetime import datetime as _dt
-    test_type = (body.get("test_type") or "").strip()  # e.g. "full restore", "partial", "smoke"
-    result = (body.get("result") or "").strip()  # "passed" | "failed" | "partial"
-    notes = (body.get("notes") or "").strip()
-    operator = (body.get("operator") or "").strip()
-    tested_at = (body.get("tested_at") or "").strip()
-    if not test_type or not result:
-        raise HTTPException(status_code=400, detail="test_type and result are required")
-    if not tested_at:
-        tested_at = _dt.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    records = _load_backup_attestations()
-    next_id = (max((r.get("id", 0) for r in records), default=0)) + 1
-    record = {"id": next_id, "test_type": test_type, "result": result,
-              "operator": operator, "tested_at": tested_at, "notes": notes}
-    records.append(record)
-    _save_backup_attestations(records)
-    return {"record": record}
-
-
-@app.get("/admin/fleet/nodes")
-def fleet_nodes(key: str = Depends(_admin_auth)):
-    """Return the fleet.json registry plus liveness annotation. The fleet
-    dashboard uses this as its master view."""
-    import fleet as _fleet
-    active = {n["node_id"] for n in _fleet.active_nodes()}
-    nodes = []
-    for n in _fleet.all_nodes():
-        nodes.append({**n, "alive": n.get("node_id") in active})
-    nodes.sort(key=lambda x: x.get("node_id", ""))
-    return {"this_node": _NODE_ID, "active_count": len(active), "nodes": nodes}
-
-
-@app.get("/admin/fleet/alerts")
-def fleet_alerts(request: Request, key: str = Depends(_admin_auth)):
-    """Aggregate monitor alerts from every active node so the dashboard
-    can show fleet-wide alert state in one call."""
-    import ssl
-    import urllib.error
-    import urllib.request
-
-    import fleet as _fleet
-    auth_header = request.headers.get("authorization", "")
-    nodes = _fleet.active_nodes() or []
-    ssl_ctx = ssl.create_default_context()
-    ssl_ctx.check_hostname = False
-    ssl_ctx.verify_mode = ssl.CERT_NONE
-    out = []
-    for node in nodes:
-        nid = node.get("node_id", "?")
-        if nid == _NODE_ID:
-            try:
-                from monitoring.monitor import alerts as _local_alerts
-                out.append({"node_id": nid, "alerts": _local_alerts() if callable(_local_alerts) else []})
-            except Exception:
-                out.append({"node_id": nid, "alerts": []})
-            continue
-        try:
-            url = f"{node.get('api_url', '').rstrip('/')}/admin/monitor/alerts"
-            req2 = urllib.request.Request(url, headers={"Authorization": auth_header})
-            with urllib.request.urlopen(req2, timeout=3, context=ssl_ctx) as r:
-                out.append({"node_id": nid, "alerts": json.loads(r.read().decode("utf-8"))})
-        except (urllib.error.URLError, OSError, ValueError, TimeoutError) as e:
-            out.append({"node_id": nid, "alerts": [], "unreachable": str(e)[:160]})
-    return {"nodes": out}
-
-
-@app.get("/admin/fleet/sync-conflicts")
-def fleet_sync_conflicts(key: str = Depends(_admin_auth)):
-    """List Syncthing conflict files quarantined by the sentinel into
-    SHARED_DIR/conflicts/. Operators reconcile via the dashboard rather
-    than touching files directly."""
-    from config import SHARED_DIR
-    qdir = SHARED_DIR / "conflicts"
-    if not qdir.exists():
-        return {"shared_dir": str(SHARED_DIR), "conflicts": []}
-    items = []
-    for f in sorted(qdir.iterdir(), key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True):
-        try:
-            st = f.stat()
-            items.append({
-                "name": f.name,
-                "size": st.st_size,
-                "mtime": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(st.st_mtime)),
-            })
-        except OSError:
-            continue
-    return {"shared_dir": str(SHARED_DIR), "conflicts": items}
-
-
-@app.get("/admin/fleet/qdrant-health")
-def fleet_qdrant_health(key: str = Depends(_admin_auth)):
-    """Report Qdrant cluster state from this node's perspective. Hits the
-    local Qdrant /cluster endpoint and returns peer-id → status. The
-    fleet dashboard aggregates per-node views to show fleet-wide cluster
-    health (e.g. "Mac-A sees both peers; Mac-B sees only itself" → split
-    brain).
-
-    Single-node deployments (no QDRANT_URLS, embedded store) cleanly
-    return mode:"single-node" — never errors.
-    """
-    import urllib.error
-    import urllib.request
-
-    from config import QDRANT_API_KEY, QDRANT_URL, QDRANT_URLS
-    if not QDRANT_URLS and not QDRANT_URL:
-        return {"node_id": _NODE_ID, "mode": "single-node",
-                "reason": "QDRANT_URLS/QDRANT_URL unset; using embedded store"}
-    target = (QDRANT_URLS or [QDRANT_URL])[0].rstrip("/")
-    headers = {}
-    if QDRANT_API_KEY:
-        headers["api-key"] = QDRANT_API_KEY
-    try:
-        req = urllib.request.Request(f"{target}/cluster", headers=headers)
-        with urllib.request.urlopen(req, timeout=3) as r:
-            body = json.loads(r.read().decode("utf-8"))
-        result = body.get("result", {}) or {}
-        peers = result.get("peers", {}) or {}
-        return {
-            "node_id":     _NODE_ID,
-            "mode":        "cluster" if result.get("status") == "enabled" else "single",
-            "raft_state":  result.get("raft_info", {}).get("role"),
-            "peer_count":  len(peers),
-            "peers":       [{"id": pid, "uri": p.get("uri")} for pid, p in peers.items()],
-        }
-    except (urllib.error.URLError, OSError, ValueError, TimeoutError) as e:
-        return {"node_id": _NODE_ID, "mode": "unreachable",
-                "reason": str(e)[:200], "target": target}
-
-
-@app.get("/admin/fleet/gate")
-def fleet_gate(request: Request, key: str = Depends(_admin_auth)):
-    """Per-node inference-gate snapshot: max_inflight, in_flight, queued,
-    peak_queue, total_admitted, total_rejected. Fan-out aggregates so
-    the dashboard can show fleet-wide load."""
-    import ssl
-    import urllib.error
-    import urllib.request
-
-    import fleet as _fleet
-    from inference_gate import stats as _gate_stats
-    auth_header = request.headers.get("authorization", "")
-    nodes = _fleet.active_nodes() or []
-    ssl_ctx = ssl.create_default_context()
-    ssl_ctx.check_hostname = False
-    ssl_ctx.verify_mode = ssl.CERT_NONE
-    out = []
-    for n in nodes:
-        nid = n.get("node_id", "?")
-        if nid == _NODE_ID:
-            out.append({"node_id": nid, "gate": _gate_stats()})
-            continue
-        url = f"{n.get('api_url', '').rstrip('/')}/admin/monitor/health/detailed"
-        try:
-            req2 = urllib.request.Request(url, headers={"Authorization": auth_header})
-            with urllib.request.urlopen(req2, timeout=3, context=ssl_ctx) as r:
-                body = json.loads(r.read().decode("utf-8"))
-            out.append({"node_id": nid, "gate": body.get("inference_gate", {})})
-        except (urllib.error.URLError, OSError, ValueError, TimeoutError) as e:
-            out.append({"node_id": nid, "gate": {}, "unreachable": str(e)[:160]})
-    if not out:
-        # Single-node degenerate path
-        out.append({"node_id": _NODE_ID, "gate": _gate_stats()})
-    return {"nodes": out}
-
-
-@app.post("/admin/fleet/refresh")
-def fleet_refresh(key: str = Depends(_admin_auth)):
-    """Force this node to re-read users.json + erasure.log right now,
-    bypassing the 1-second mtime cache. Called by a coordinating peer
-    after a privileged write (key rotation, erasure) on the shared store
-    to close the propagation gap from the Syncthing interval (~10s) down
-    to one network round-trip.
-
-    Idempotent and cheap — a single stat + (if changed) a small JSON
-    parse. Safe to call from any peer with a valid admin bearer."""
-    import config as _config
-    from config import _load_erased, reload_users
-    reload_users()
-    _config._ERASED = _load_erased()
-    try:
-        from config import ERASURE_LOG as _EL
-        _config._ERASURE_MTIME = _EL.stat().st_mtime if _EL.exists() else 0.0
-    except OSError:
-        pass
-    return {"status": "ok", "node_id": _NODE_ID,
-            "users": len(_config.USERS), "erased": len(_config._ERASED)}
-
-
-@app.get("/admin/fleet/audit-verify")
-def fleet_audit_verify(request: Request, key: str = Depends(_admin_auth)):
-    """Fan out /admin/audit-verify to every active node and aggregate the
-    per-node results. Auditors verify the whole fleet from one call.
-
-    Each node's chain is independent (per-node chains are a deliberate
-    design choice — see docs/ha-2node-clients.md): we report each node's
-    status separately and let the operator decide what "the fleet is
-    healthy" means. fleet_status is "ok" iff every node reported "ok".
-
-    The call is short-circuited for the local node (no HTTP hop). Peer
-    calls re-use the bearer token the caller used here; if peer auth
-    diverges the per-node entry will report status:"unreachable".
-    """
-    import ssl
-    import urllib.error
-    import urllib.request
-
-    import fleet as _fleet
-
-    auth_header = request.headers.get("authorization", "")
-    nodes = _fleet.active_nodes() or []
-    if not nodes:
-        # No fleet entries at all — degenerate to single-node verify.
-        local = audit_verify(key=key)
-        local["node_id"] = _NODE_ID
-        return {"fleet_status": local.get("status", "unknown"),
-                "nodes": [local]}
-
-    results = []
-    overall_ok = True
-    # Self-signed TLS in single-firm LANs — accept the peer's cert without
-    # verification. The bearer token is the actual authentication; TLS is
-    # for transit confidentiality, not peer identity (the LAN is trusted).
-    ssl_ctx = ssl.create_default_context()
-    ssl_ctx.check_hostname = False
-    ssl_ctx.verify_mode = ssl.CERT_NONE
-
-    for node in nodes:
-        node_id = node.get("node_id", "?")
-        if node_id == _NODE_ID:
-            local = audit_verify(key=key)
-            local["node_id"] = _NODE_ID
-            results.append(local)
-            if local.get("status") != "ok":
-                overall_ok = False
-            continue
-
-        url = f"{node.get('api_url', '').rstrip('/')}/admin/audit-verify"
-        try:
-            req = urllib.request.Request(url, headers={"Authorization": auth_header})
-            with urllib.request.urlopen(req, timeout=5, context=ssl_ctx) as resp:
-                payload = json.loads(resp.read().decode("utf-8"))
-                payload["node_id"] = node_id
-                results.append(payload)
-                if payload.get("status") != "ok":
-                    overall_ok = False
-        except (urllib.error.URLError, OSError, ValueError, TimeoutError) as e:
-            results.append({"node_id": node_id, "status": "unreachable",
-                            "reason": str(e)[:200]})
-            overall_ok = False
-
-    return {"fleet_status": "ok" if overall_ok else "degraded",
-            "nodes": results}
-
-
-# ── System updates (admin-only) ─────────────────────────────────────────────
-# See system_updates.py + kill_switch.py + deploy.py for the
-# defence-in-depth model: two channels (dev / stable), GPG-signed tags,
-# SHA-256 manifest, OOB kill switch, atomic deploy + rollback.
-import kill_switch as _ks_mod
-import system_updates as _su_mod
-
-
-@app.get("/admin/updates")
-@limiter.limit("60/minute")
-def admin_list_updates(request: Request, key: str = Depends(_admin_auth)):
-    """Manager UI calls this to render the Updates page."""
-    return {
-        "channel_status":  _su_mod.status(),
-        "kill_switch":     _ks_mod.status(),
-        "available":       [_su_mod.to_dict(u) for u in _su_mod.list_available()],
-    }
-
-
-@app.post("/admin/updates/apply/{tag}")
-@limiter.limit("10/minute")
-def admin_apply_update(tag: str, request: Request, key: str = Depends(_admin_auth)):
-    """Apply a specific tag. Re-verifies + atomic deploys + rolls back on
-    health-check failure. Synchronous (returns when apply settles); the
-    UI shows a spinner during the call (~30–90 s including healthz wait)."""
-    import deploy as _dep
-    return _dep.apply_tag(tag)
-
-
-# ── LLM model picker (admin-only) ───────────────────────────────────────────
-import llm_models as _llm_mod
-
-
-@app.get("/admin/models")
-@limiter.limit("60/minute")
-def admin_list_models(request: Request, key: str = Depends(_admin_auth)):
-    return {
-        "current":  _llm_mod.current_model(),
-        "models":   _llm_mod.list_models(),
-        "download": _llm_mod.download_status(),
-    }
-
-
-class _ModelSelectReq(BaseModel):
-    model_id: str = Field(..., min_length=1, max_length=200)
-
-
-@app.post("/admin/models/select")
-@limiter.limit("10/minute")
-def admin_select_model(req: _ModelSelectReq, request: Request, key: str = Depends(_admin_auth)):
-    """Kick off a background model download + .env swap + API restart.
-    Returns immediately; UI polls /admin/models for download_status."""
-    return _llm_mod.select(req.model_id)
-
-
-# ── Client app installer distribution (admin-only) ──────────────────────────
-# IT downloads the LocallyAI Worker / Manager .dmg / .msi from THIS server
-# instead of GitHub directly — keeps the firm's perimeter intact (no
-# GitHub accounts on staff devices). See client_installers.py for the
-# pull mechanism (gh CLI against LocallyAI/locallyai's -clients tags)
-# and docs/sop/client-install.md for the IT workflow.
-import client_installers as _ci
-
-
-@app.get("/admin/installers")
-@limiter.limit("60/minute")
-def admin_list_installers(request: Request, key: str = Depends(_admin_auth)):
-    return {
-        "files":  _ci.list_files(),
-        "status": _ci.status(),
-        "refresh_in_flight": _ci.is_refresh_in_flight(),
-        "rebuild_in_flight": _ci.is_rebuild_in_flight(),
-    }
-
-
-@app.post("/admin/installers/refresh")
-@limiter.limit("10/minute")
-def admin_refresh_installers(request: Request, key: str = Depends(_admin_auth)):
-    """Pull the newest -clients release from GitHub. Returns immediately;
-    the actual download runs in a background thread (see refresh_async)
-    so the UI doesn't hang for 30+ seconds on a slow link."""
-    return _ci.refresh_async()
-
-
-@app.post("/admin/installers/rebuild")
-@limiter.limit("6/minute")
-def admin_rebuild_installers(request: Request, key: str = Depends(_admin_auth)):
-    """Rebuild the per-firm staff-laptop apps in-place by running
-    scripts/build_staff_apps.sh. Different from /refresh — refresh
-    pulls generic builds from GitHub Releases; rebuild regenerates
-    locally-baked per-firm builds (the URL the WKWebView wrapper points
-    at is this firm's office hostname). Triggered by IT after a
-    `git pull` or hostname change. Returns immediately; the build
-    runs in a background thread."""
-    return _ci.rebuild_async()
-
-
-@app.get("/admin/installers/{filename}")
-@limiter.limit("60/minute")
-def admin_download_installer(filename: str, request: Request, key: str = Depends(_admin_auth)):
-    """Stream an installer file. Path-traversal hardened in resolve_file
-    (rejects ./../ + restricts to known suffixes inside storage/installers/).
-    """
-    p = _ci.resolve_file(filename)
-    if p is None:
-        raise HTTPException(status_code=404, detail="Installer not found")
-    return FileResponse(
-        path=str(p),
-        filename=p.name,
-        media_type="application/octet-stream",
-        # Browsers see this header and offer a Save dialog rather than
-        # rendering. The double-quote handling matters because Tauri
-        # filenames include spaces ("LocallyAI Worker_…").
-        headers={"Content-Disposition": f'attachment; filename="{p.name}"'},
-    )
+# NOTE (PR-4): the training-records CRUD, backup-attestations CRUD,
+# fleet/*, updates/*, models/*, installers/* routes (and their loader /
+# saver helpers, the _ModelSelectReq Pydantic, the kill_switch /
+# system_updates / llm_models / client_installers module imports they
+# pull in) all live in api/admin.py and are mounted via the
+# `app.include_router(_admin_router)` above. The compliance helpers
+# (_compliance_training_records / _compliance_backup_attestations) stay
+# here and read `_TRAINING_RECORDS_FILE` / `_BACKUP_ATTESTATIONS_FILE`
+# directly off the filesystem — no functional coupling to admin.py.
 
 
 if __name__ == "__main__":
