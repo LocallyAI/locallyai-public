@@ -399,21 +399,30 @@ fi
 # (changing it would require rebuilding the Qdrant collection -- vector size 768
 # is hardcoded in config.py). Users can add more later with `ollama pull` or `lms get`.
 choose_models_ollama() {
+  # Curated for the LocallyAI plugin + tool-calling story. Each tag in
+  # square brackets describes tool-call reliability — plugins (clearance,
+  # DPIA, discovery-plan etc) need the model to emit clean OpenAI function
+  # calls. Models verified by tests/tool_calling_smoke.py against a 2-tool
+  # dummy schema get [tools: verified]; older/unfamiliar models get
+  # [tools: unverified] and the worker-ui plugin picker is disabled while
+  # they're active (capability flag exposed by /v1/models). [tools: fails]
+  # models are kept for plain-chat use only with "(plugins unsupported)"
+  # appended so the operator can see the trade-off upfront.
   local options=(
-    "qwen2.5:7b|4.7GB|Best general 7B model. Fits 16GB+ Macs. (Default)"
-    "qwen2.5:14b|9GB|Stronger reasoning. Needs 24GB+ RAM."
-    "qwen2.5:32b|20GB|Production-grade. Needs 48GB+ RAM."
-    "qwen2.5:72b|41GB|Mac Studio territory. Needs 128GB+ RAM."
-    "qwen2.5-coder:7b|4.7GB|Code-focused variant of qwen2.5."
-    "llama3.3:70b|40GB|Meta flagship. 128GB+ RAM. ARCHITECTURE.md default."
-    "llama3.1:8b|4.7GB|Meta Llama 3.1 8B."
-    "deepseek-r1:7b|4.7GB|Reasoning model with chain-of-thought."
-    "deepseek-r1:14b|9GB|Larger reasoning model. 24GB+ RAM."
-    "mistral:7b|4.4GB|Mistral AI's classic instruction-tuned 7B."
-    "mixtral:8x7b|26GB|Mixture-of-experts. 48GB+ RAM."
-    "gemma2:9b|5.4GB|Google DeepMind. Strong small model."
-    "gemma2:27b|16GB|Larger Gemma. 32GB+ RAM."
-    "phi4:14b|9GB|Microsoft Phi-4. Strong reasoning per byte."
+    "qwen2.5:7b|4.7GB|[tools: verified] Best general 7B model. Fits 16GB+ Macs. (Default)"
+    "qwen2.5:14b|9GB|[tools: verified] Stronger reasoning + tool chains. Needs 24GB+ RAM."
+    "qwen2.5:32b|20GB|[tools: verified] Production-grade. Needs 48GB+ RAM."
+    "qwen2.5:72b|41GB|[tools: verified] Mac Studio territory. Needs 128GB+ RAM."
+    "qwen2.5-coder:7b|4.7GB|[tools: verified] Code-focused variant of qwen2.5."
+    "llama3.3:70b|40GB|[tools: unverified] Meta flagship. 128GB+ RAM. Verify with tool_calling_smoke before enabling plugins."
+    "llama3.1:8b|4.7GB|[tools: unverified] Meta Llama 3.1 8B."
+    "mixtral:8x7b|26GB|[tools: unverified] Mixture-of-experts. 48GB+ RAM."
+    "deepseek-r1:7b|4.7GB|[tools: fails] Reasoning model — interleaves <think> tokens in function-call JSON. (plugins unsupported)"
+    "deepseek-r1:14b|9GB|[tools: fails] Same caveat as r1:7b. (plugins unsupported)"
+    "mistral:7b|4.4GB|[tools: fails] Classic instruction-tuned — schema drift on tool round-trip. (plugins unsupported)"
+    "gemma2:9b|5.4GB|[tools: fails] Strong chat model but malformed tool output. (plugins unsupported)"
+    "gemma2:27b|16GB|[tools: fails] Same caveat. (plugins unsupported)"
+    "phi4:14b|9GB|[tools: fails] Idiosyncratic tool schema, doesn't round-trip ours. (plugins unsupported)"
   )
   echo ""
   echo "  Available open-source LLMs:"
@@ -452,19 +461,27 @@ choose_models_ollama() {
 
 # MLX model picker (mlx-community 4-bit quantizations on HuggingFace).
 choose_models_mlx() {
+  # Curated for the LocallyAI plugin + tool-calling story.
+  #
+  # Default WAS Llama-3.2-1B-Instruct-4bit (0.7GB). Demoted because 1B
+  # parameter models hallucinate tool names + emit malformed JSON
+  # arguments — internal eval shows >30% failure on a 4-tool schema.
+  # 7B is the floor for reliable tool calling. New default is
+  # Qwen2.5-7B-Instruct-4bit (4.3GB), which fits 16GB Macs and passes
+  # tests/tool_calling_smoke.py.
   local options=(
-    "mlx-community/Llama-3.2-1B-Instruct-4bit|0.7GB|Tiny + fast. Proves the pipeline on any MacBook. (Default)"
-    "mlx-community/Llama-3.2-3B-Instruct-4bit|1.8GB|Larger but still snappy on a MacBook."
-    "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit|4.5GB|Meta Llama 3.1 8B. 16GB+ RAM."
-    "mlx-community/Qwen2.5-7B-Instruct-4bit|4.3GB|Strong general 7B. 16GB+ RAM."
-    "mlx-community/Qwen2.5-14B-Instruct-4bit|8.5GB|Stronger reasoning. 24GB+ RAM."
-    "mlx-community/Qwen2.5-32B-Instruct-4bit|18GB|Production-grade. 48GB+ RAM."
-    "mlx-community/Mistral-7B-Instruct-v0.3-4bit|4.1GB|Mistral classic, instruction-tuned."
-    "mlx-community/Mixtral-8x7B-Instruct-v0.1-4bit|24GB|Mixture-of-experts. 48GB+ RAM."
-    "mlx-community/gemma-2-9b-it-4bit|5.0GB|Google DeepMind. Strong small model."
-    "mlx-community/Phi-3.5-mini-instruct-4bit|2.2GB|Microsoft Phi-3.5 mini."
-    "mlx-community/Llama-3.3-70B-Instruct-4bit|40GB|Meta flagship. 128GB+ RAM."
-    "mlx-community/DeepSeek-R1-Distill-Qwen-7B-4bit|4.3GB|Reasoning model with chain-of-thought."
+    "mlx-community/Qwen2.5-7B-Instruct-4bit|4.3GB|[tools: verified] Strong general 7B. 16GB+ RAM. (Default)"
+    "mlx-community/Qwen2.5-14B-Instruct-4bit|8.5GB|[tools: verified] Stronger reasoning + tool chains. 24GB+ RAM."
+    "mlx-community/Qwen2.5-32B-Instruct-4bit|18GB|[tools: verified] Production-grade. 48GB+ RAM."
+    "mlx-community/Llama-3.2-3B-Instruct-4bit|1.8GB|[tools: low] Pipeline smoke-test only — tool calling unreliable. Switch to Qwen 7B before enabling plugins."
+    "mlx-community/Llama-3.3-70B-Instruct-4bit|40GB|[tools: unverified] Meta flagship. 128GB+ RAM. Verify with tool_calling_smoke before enabling plugins."
+    "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit|4.5GB|[tools: unverified] Meta Llama 3.1 8B. 16GB+ RAM."
+    "mlx-community/Mixtral-8x7B-Instruct-v0.1-4bit|24GB|[tools: unverified] Mixture-of-experts. 48GB+ RAM."
+    "mlx-community/Llama-3.2-1B-Instruct-4bit|0.7GB|[tools: fails] 1B is below the tool-call floor — hallucinates tool names. (plugins unsupported)"
+    "mlx-community/Mistral-7B-Instruct-v0.3-4bit|4.1GB|[tools: fails] Schema drift on tool round-trip. (plugins unsupported)"
+    "mlx-community/gemma-2-9b-it-4bit|5.0GB|[tools: fails] Malformed tool output. (plugins unsupported)"
+    "mlx-community/Phi-3.5-mini-instruct-4bit|2.2GB|[tools: fails] Idiosyncratic tool schema. (plugins unsupported)"
+    "mlx-community/DeepSeek-R1-Distill-Qwen-7B-4bit|4.3GB|[tools: fails] Interleaves <think> in JSON arguments. (plugins unsupported)"
   )
   echo ""
   echo "  MLX LLMs (mlx-community on HuggingFace, 4-bit quantized):"
@@ -495,8 +512,8 @@ choose_models_mlx() {
     fi
   done
   if [[ ${#SELECTED_MODELS[@]} -eq 0 ]]; then
-    warn "No valid picks -- defaulting to mlx-community/Llama-3.2-1B-Instruct-4bit"
-    SELECTED_MODELS=("mlx-community/Llama-3.2-1B-Instruct-4bit")
+    warn "No valid picks -- defaulting to mlx-community/Qwen2.5-7B-Instruct-4bit"
+    SELECTED_MODELS=("mlx-community/Qwen2.5-7B-Instruct-4bit")
   fi
 }
 

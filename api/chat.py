@@ -241,31 +241,76 @@ def _stream_ollama(messages: list[dict], model: str | None, max_tokens: int,
                     yield tok
 
 
+# ── Tool-calling capability registry ──────────────────────────────────────────
+# Worker-ui's plugin picker reads /v1/models and disables the dropdown when the
+# active model is NOT "verified". Source of truth for what install.sh's option
+# arrays advertise as [tools: verified] vs [tools: fails]. Substring match (so
+# both `qwen2.5:7b` and `mlx-community/Qwen2.5-7B-Instruct-4bit` map to
+# verified). Updated via a PR that runs tests/tool_calling_smoke.py against the
+# candidate model before merge — never extend from training-data memory alone.
+_TOOL_VERIFIED = (
+    "qwen2.5", "qwen2.5-coder",
+    "mlx-community/qwen2.5",
+)
+_TOOL_FAILS = (
+    # Sub-3B models, deepseek-r1 (interleaves <think> in JSON args),
+    # mistral classic, gemma2 family, phi-3.5 / phi-4 family.
+    "llama-3.2-1b", "llama3.2:1b",
+    "deepseek-r1", "deepseek-r1-distill",
+    "mistral:7b", "mistral-7b-instruct",
+    "gemma-2", "gemma2",
+    "phi-3.5", "phi3.5", "phi4",
+)
+
+
+def _tool_capability(model_id: str) -> str:
+    """Classify a model id (raw upstream string, lowercase-matched).
+
+    Returns "verified" | "fails" | "unverified". The plugin picker disables
+    itself on anything that is not "verified". "fails" is loud in the UI
+    (red banner: "plugins unsupported"); "unverified" is neutral (yellow
+    tooltip: "verify with tool_calling_smoke before enabling plugins")."""
+    lo = (model_id or "").lower()
+    if any(needle in lo for needle in _TOOL_FAILS):
+        return "fails"
+    if any(needle in lo for needle in _TOOL_VERIFIED):
+        return "verified"
+    return "unverified"
+
+
 def _list_models():
     import api as _api_pkg
     backend = getattr(_api_pkg, "BACKEND", "ollama")
     if backend == "mlx":
         from mlx_inference import list_models
-        return list_models()
-    import urllib.request as _url
-    try:
-        with _url.urlopen(f"{LLM_BASE_URL}/v1/models", timeout=5) as r:
-            data = json.loads(r.read())
-        return [
-            {"id": m.get("id", "unknown"), "object": "model", "owned_by": "locallyai"}
-            for m in data.get("data", [])
-        ]
-    except Exception:
-        # Ollama-native fallback for older installs that don't expose /v1/models
+        raw = list_models()
+    else:
+        raw = []
+        import urllib.request as _url
         try:
-            with _url.urlopen(f"{LLM_BASE_URL}/api/tags", timeout=5) as r:
+            with _url.urlopen(f"{LLM_BASE_URL}/v1/models", timeout=5) as r:
                 data = json.loads(r.read())
-            return [
-                {"id": m["name"], "object": "model", "owned_by": "locallyai"}
-                for m in data.get("models", [])
+            raw = [
+                {"id": m.get("id", "unknown"), "object": "model", "owned_by": "locallyai"}
+                for m in data.get("data", [])
             ]
         except Exception:
-            return []
+            # Ollama-native fallback for older installs that don't expose /v1/models
+            try:
+                with _url.urlopen(f"{LLM_BASE_URL}/api/tags", timeout=5) as r:
+                    data = json.loads(r.read())
+                raw = [
+                    {"id": m["name"], "object": "model", "owned_by": "locallyai"}
+                    for m in data.get("models", [])
+                ]
+            except Exception:
+                raw = []
+    # Enrich every entry with a tool_calling capability flag the worker-ui's
+    # plugin picker consumes. Backwards-compatible: existing OpenAI-style
+    # clients that don't read the field ignore it.
+    for m in raw:
+        m["tool_calling"] = _tool_capability(m.get("id", ""))
+    return raw
 
 
 # ── RAG context hardening ─────────────────────────────────────────────────────
