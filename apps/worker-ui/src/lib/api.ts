@@ -271,6 +271,80 @@ export interface ChatRequestPayload {
   max_tokens?: number;
   temperature?: number;
   matter_code?: string;
+  /** Plugin activation. When set, the active plugin's CLAUDE.md practice
+   * profile and (optional) skill body are spliced into the system prompt,
+   * and the plugin's declared MCP tools (search/audit/matter/citation)
+   * are merged with caller-provided `tools`. Backend rejects unknown
+   * plugin names silently — the request still succeeds with the base
+   * persona alone, so a typo never 500s. */
+  plugin?: string;
+  /** Skill within the active plugin. Ignored unless `plugin` is also set. */
+  skill?: string;
+}
+
+/** Tool-call capability of a model, returned by GET /v1/models. The plugin
+ * picker uses this to enable / disable itself for the active model. */
+export type ToolCallingCapability = "verified" | "unverified" | "fails";
+
+export interface ModelInfo {
+  id: string;
+  object: "model";
+  owned_by: string;
+  /** Added in step 6 of the plugin/MCP work. Older backends may omit
+   * this field; treat missing as "unverified" in the UI. */
+  tool_calling?: ToolCallingCapability;
+}
+
+export interface ModelsResponse {
+  object: "list";
+  data: ModelInfo[];
+}
+
+/** GET /v1/models — used by the plugin picker to disable itself when the
+ * active model has `tool_calling: "fails"` or omits the field. */
+export async function listModels(): Promise<ModelInfo[]> {
+  const res = await authedFetch("/v1/models");
+  if (!res.ok) throw new ApiError(res.status, (await res.text()) || `HTTP ${res.status}`);
+  const body: ModelsResponse = await res.json();
+  return body.data ?? [];
+}
+
+export interface SkillSummary {
+  name: string;
+  description: string;
+}
+
+export interface PluginSummary {
+  name: string;
+  version: string;
+  description: string;
+  skills: SkillSummary[];
+  mcp_servers: string[];
+}
+
+export interface SkillDetail {
+  plugin: string;
+  skill: string;
+  description: string;
+  body_md: string;
+}
+
+/** GET /v1/plugins — list installed plugins + their skill metadata.
+ * Used by the plugin picker dropdown. */
+export async function listPlugins(): Promise<PluginSummary[]> {
+  const res = await authedFetch("/v1/plugins");
+  if (!res.ok) throw new ApiError(res.status, (await res.text()) || `HTTP ${res.status}`);
+  return res.json();
+}
+
+/** GET /v1/plugins/{plugin}/skill?skill={skill} — full SKILL.md body for
+ * one skill. Used by the plugin detail panel + by the operator for
+ * debugging what the model is actually seeing. */
+export async function getSkillBody(plugin: string, skill: string): Promise<SkillDetail> {
+  const qs = new URLSearchParams({ skill }).toString();
+  const res = await authedFetch(`/v1/plugins/${encodeURIComponent(plugin)}/skill?${qs}`);
+  if (!res.ok) throw new ApiError(res.status, (await res.text()) || `HTTP ${res.status}`);
+  return res.json();
 }
 
 // Browser crypto.randomUUID is widely available; fall back for older
