@@ -246,21 +246,11 @@ def _list_models():
 
 # ── RAG context hardening ─────────────────────────────────────────────────────
 
-# Phrases attackers stuff into documents to hijack a RAG system. Conservative
-# list — false positives are noisy but never block; we only emit a security
-# log entry. Add more on incident; remove only with a reviewed PR.
-_INJECTION_PATTERNS = (
-    "ignore previous instructions",
-    "ignore the above",
-    "ignore all prior",
-    "disregard prior",
-    "you are now",
-    "system prompt:",
-    "<|im_start|>",
-    "<|system|>",
-    "[/inst]",
-    "<<sys>>",
-)
+# Phrases attackers stuff into documents to hijack a RAG system. Lifted into
+# api/_shared.py so the plugin loader (api/plugins.py) runs SKILL.md bodies
+# through the same filter at load time. Re-aliased under the original local
+# name so existing call sites in chat.py stay un-touched.
+from api._shared import INJECTION_PATTERNS as _INJECTION_PATTERNS  # noqa: E402
 
 
 def _sanitize_chunk(c: dict) -> dict:

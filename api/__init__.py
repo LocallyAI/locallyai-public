@@ -213,6 +213,23 @@ def _init_runtime_paths():
 
 
 @app.on_event("startup")
+def _load_plugins_startup():
+    """Plugins step: scan PLUGIN_DIR (override via LOCALLYAI_PLUGIN_DIR) for
+    claude-for-legal-format plugins and populate api.plugins._PLUGIN_REGISTRY.
+    Loader is failure-tolerant: any single malformed plugin is logged and
+    skipped without crashing startup. Default location BASE_DIR / "plugins"
+    is silently absent on a fresh install — that's not an error."""
+    import os as _os
+    from pathlib import Path as _Path
+
+    from api import plugins as _plugins
+    from api._shared import BASE_DIR as _BASE_DIR
+    override = _os.environ.get("LOCALLYAI_PLUGIN_DIR")
+    plugin_dir = _Path(override) if override else _BASE_DIR / "plugins"
+    _plugins.load_plugins_from_dir(plugin_dir)
+
+
+@app.on_event("startup")
 def _bootstrap_collection():
     """Idempotently create the Qdrant collection so /v1/chat/completions works
     on first boot, even before the operator has run ingest.py."""
@@ -392,6 +409,14 @@ app.include_router(_admin_router)
 from api.compliance import router as _compliance_router  # noqa: E402
 
 app.include_router(_compliance_router)
+
+
+# Plugins (claude-for-legal-format SKILL.md loader + /v1/plugins endpoints).
+# Registered after compliance so the include order matches the startup-event
+# order (compliance helpers init first, plugins last).
+from api.plugins import router as _plugins_router  # noqa: E402
+
+app.include_router(_plugins_router)
 
 
 # NOTE (PR-4): the training-records CRUD, backup-attestations CRUD,

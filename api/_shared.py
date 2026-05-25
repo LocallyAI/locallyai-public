@@ -614,3 +614,48 @@ def audit_verify_body() -> dict:
 # writer and reader.
 _TRAINING_RECORDS_FILE = BASE_DIR / "training_records.json"
 _BACKUP_ATTESTATIONS_FILE = BASE_DIR / "backup_attestations.json"
+
+
+# ── Prompt-injection defence primitives ───────────────────────────────────────
+# Conservative substring list — false positives are noisy but never block;
+# callers only emit a security log entry on a positive match. Originally lived
+# in api/chat.py for the RAG context-hardening path; lifted here so the plugin
+# loader (api/plugins.py) applies the same filter to SKILL.md bodies at load
+# time. Add to this list on incident; remove only with a reviewed PR.
+INJECTION_PATTERNS = (
+    "ignore previous instructions",
+    "ignore the above",
+    "ignore all prior",
+    "disregard prior",
+    "you are now",
+    "system prompt:",
+    "<|im_start|>",
+    "<|system|>",
+    "[/inst]",
+    "<<sys>>",
+)
+
+
+def looks_like_prompt_injection(text: str) -> bool:
+    if not text:
+        return False
+    lo = text.lower()
+    return any(p in lo for p in INJECTION_PATTERNS)
+
+
+def sanitize_markdown_body(text: str, max_len: int = 8000) -> str:
+    """Strip control chars + zero-width marks, rewrite the chunk-delimiter
+    sequences used in the system prompt, and bound length. Used by the plugin
+    loader on every SKILL.md body so a malicious plugin author can't smuggle
+    boundary spoofs or oversized payloads into the model's context."""
+    if not isinstance(text, str):
+        text = str(text)
+    text = "".join(
+        ch for ch in text
+        if (ch in ("\n", "\t") or 0x20 <= ord(ch) < 0x7F or ord(ch) >= 0xA0)
+    )
+    text = text.replace("​", "").replace("‌", "").replace("‍", "").replace("﻿", "")
+    text = text.replace("<<<", "‹‹‹").replace(">>>", "›››")
+    if len(text) > max_len:
+        text = text[:max_len] + "\n[...truncated for safety]"
+    return text

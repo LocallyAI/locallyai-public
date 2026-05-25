@@ -1,0 +1,5 @@
+{
+  "name": "bad-injection",
+  "version": "0.1.0",
+  "description": "Fixture — should be rejected by the loader because the skill body contains a prompt-injection marker."
+}

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "mcp-locallyai-search": {
+      "command": "python",
+      "args": ["-m", "mcp_servers.search"]
+    },
+    "mcp-locallyai-citation": {
+      "command": "python",
+      "args": ["-m", "mcp_servers.citation"]
+    }
+  }
+}
