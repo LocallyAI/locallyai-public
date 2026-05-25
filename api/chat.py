@@ -100,6 +100,30 @@ class ChatRequest(BaseModel):
         max_length=64,
         pattern=r"^[A-Za-z0-9/_\-\.]{1,64}$",
     )
+    # Plugin activation. When set, api.plugins.build_chat_system_prompt_addendum
+    # splices the named plugin's practice profile (CLAUDE.md) and the optional
+    # named skill's body (SKILL.md) into the system prompt BEFORE the retrieval
+    # context, and api.plugins.builtin_tool_defs(...) merges that plugin's
+    # declared in-process MCP tools with caller-supplied `tools`. Unknown
+    # plugin/skill is a no-op (logged warning); the chat handler still serves
+    # the request with the base persona alone — never 500s on a typo.
+    plugin: str | None = Field(
+        None,
+        description="Plugin name to activate (loaded from LOCALLYAI_PLUGIN_DIR). "
+                    "Splices the plugin's CLAUDE.md practice profile + (optional) "
+                    "skill body into the system prompt, and merges the plugin's "
+                    "declared MCP tools with caller-provided tools.",
+        max_length=64,
+        pattern=r"^[a-z0-9\-]{1,64}$",
+    )
+    skill: str | None = Field(
+        None,
+        description="Skill name within the active plugin (must be set if plugin "
+                    "is set, else the practice profile alone is injected without "
+                    "a specific task body).",
+        max_length=64,
+        pattern=r"^[a-z0-9\-]{1,64}$",
+    )
     # Idempotency token. The worker-ui smart client generates a UUIDv4 per
     # user send. If the request times out or the node dies, the client
     # retries on the next healthy node with the same id; the receiving
@@ -527,6 +551,19 @@ def chat(request: Request,
             "respond in English. Do not switch unilaterally. When citing "
             "documents, use the language of the surrounding response."
         )
+
+    # Plugin/skill addendum — splice the active plugin's practice profile
+    # (from CLAUDE.md) + selected skill body (from SKILL.md) BEFORE the
+    # retrieval context. Order: persona → practice profile → skill body →
+    # retrieval. The model reads "you are X / today you do Y / here are
+    # the docs" in that order. Late-imported to keep chat.py's import
+    # graph clean and avoid a circular dep with api/plugins.py (which
+    # late-imports the mcp_servers/* modules).
+    from api import plugins as _plugins_mod
+    _addendum = _plugins_mod.build_chat_system_prompt_addendum(req.plugin, req.skill)
+    if _addendum:
+        base_persona = base_persona + "\n\n" + _addendum
+
     if context_chunks:
         # Wrap each chunk in an explicit, hard-to-spoof delimiter so the
         # model can't be tricked by a chunk that contains its own fake
@@ -661,7 +698,8 @@ def chat(request: Request,
                     answer_text = "".join(collected)
                     latency = (time.monotonic() - t0) * 1000
                     _write_audit(user, used_model, sources, latency,
-                                 query_hash, req.matter_code or "")
+                                 query_hash, req.matter_code or "",
+                                 plugin=req.plugin, skill=req.skill)
 
                     response = {
                         "id": f"chatcmpl-{int(time.time())}",
@@ -712,6 +750,20 @@ def chat(request: Request,
     # N+1 waits up to 30s for a slot, or returns 503 with Retry-After
     # so the smart client retries on a peer.
     from inference_gate import GateBusy, slot
+
+    # Merge plugin-declared MCP tools with caller-supplied `tools` BEFORE
+    # the first inference. Caller tools win on a name collision — the
+    # caller is the explicit, more-recent intent. A plugin-only call
+    # (no req.tools but plugin declared MCP servers) still threads tools
+    # through to _infer, so the `if _merged_tools:` branch must replace
+    # the `if req.tools:` branch.
+    _active_spec = _plugins_mod.get_plugin(req.plugin) if req.plugin else None
+    _plugin_tools = _plugins_mod.builtin_tool_defs(_active_spec)
+    _caller_tool_names = {t["function"]["name"] for t in (req.tools or [])}
+    _merged_tools = (req.tools or []) + [
+        t for t in _plugin_tools if t["function"]["name"] not in _caller_tool_names
+    ]
+
     try:
         with slot(timeout=30.0):
             try:
@@ -719,11 +771,11 @@ def chat(request: Request,
                 # them via kwargs so the legacy positional call site (and
                 # ha_chaos.py's _fake_infer, which uses the old positional
                 # signature) keep working unchanged when tools is None.
-                if req.tools:
+                if _merged_tools:
                     infer_result = _infer_callable(
                         messages, req.model, False,
                         req.max_tokens or 2048, req.temperature or 0.1,
-                        tools=req.tools, tool_choice=req.tool_choice,
+                        tools=_merged_tools, tool_choice=req.tool_choice,
                     )
                 else:
                     infer_result = _infer_callable(
@@ -750,11 +802,135 @@ def chat(request: Request,
     elif not isinstance(infer_result, dict):
         # Unknown shape — best-effort coerce to a content string.
         infer_result = {"content": str(infer_result), "tool_calls": None}
+
+    # ── Tool-call recursion ─────────────────────────────────────────────
+    # If the model called any of our in-process MCP tools, dispatch them,
+    # append role="tool" results, and re-invoke. Hard cap at 3 iterations
+    # to prevent runaway. Dispatch is in-process (no subprocess overhead)
+    # per the Step-5 architecture decision; the only allowed targets are
+    # the 4 mcp_servers/* DISPATCH tables. A caller-supplied tool that
+    # we don't recognise is left for the caller to handle — we emit a
+    # stub result that keeps the conversation consistent and stop
+    # recursing on that round so we don't loop forever waiting for a
+    # tool we can't run.
+    _MAX_TOOL_ITERATIONS = 3
+    _iteration_count = 0
+    # Snapshot which tool names are in-process. Computed once per request
+    # rather than per-iteration so a flaky import doesn't change the
+    # answer mid-recursion.
+    _in_process_names: set[str] = set()
+    for _srv_mod_path in (
+        "mcp_servers.search.server",
+        "mcp_servers.audit.server",
+        "mcp_servers.matter.server",
+        "mcp_servers.citation.server",
+    ):
+        try:
+            _srv_mod = __import__(_srv_mod_path, fromlist=["DISPATCH"])
+        except ImportError:
+            continue
+        _srv_dispatch = getattr(_srv_mod, "DISPATCH", None)
+        if isinstance(_srv_dispatch, dict):
+            _in_process_names.update(_srv_dispatch.keys())
+
+    while (
+        isinstance(infer_result, dict)
+        and infer_result.get("tool_calls")
+    ):
+        if _iteration_count >= _MAX_TOOL_ITERATIONS:
+            log.warning(
+                f"chat: tool-call recursion hit cap of {_MAX_TOOL_ITERATIONS}; "
+                f"returning last assistant turn"
+            )
+            break
+
+        # Append the assistant turn that called the tools so the model
+        # sees its own request when we re-invoke.
+        assistant_msg = {
+            "role": "assistant",
+            "content": infer_result.get("content"),
+            "tool_calls": infer_result["tool_calls"],
+        }
+        messages.append(assistant_msg)
+
+        # Dispatch each tool call; only our in-process tools are run.
+        # Caller-supplied tools get a stub "not handled" result so the
+        # role=tool round-trip stays consistent.
+        any_in_process = False
+        for tc in infer_result["tool_calls"]:
+            tc_name = (tc.get("function") or {}).get("name", "")
+            tc_args_raw = (tc.get("function") or {}).get("arguments", "{}")
+            try:
+                tc_args = (
+                    json.loads(tc_args_raw)
+                    if isinstance(tc_args_raw, str)
+                    else (tc_args_raw or {})
+                )
+            except json.JSONDecodeError:
+                tc_args = {}
+            if tc_name in _in_process_names:
+                any_in_process = True
+                tool_result = _plugins_mod.dispatch_builtin_tool(
+                    tc_name, tc_args, user=user,
+                    matter_code=req.matter_code,
+                )
+            else:
+                tool_result = {
+                    "error": f"tool '{tc_name}' not handled by server; "
+                             "caller must dispatch",
+                }
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tc.get("id", ""),
+                "name": tc_name,
+                "content": json.dumps(tool_result),
+            })
+
+        if not any_in_process:
+            # The model only called caller-supplied tools. Don't recurse —
+            # let the response envelope hand the tool_calls back to the
+            # caller for them to dispatch (existing Task-4 behaviour).
+            break
+
+        _iteration_count += 1
+        try:
+            with slot(timeout=30.0):
+                infer_result = _infer_callable(
+                    messages, req.model, False,
+                    req.max_tokens or 2048, req.temperature or 0.1,
+                    tools=_merged_tools, tool_choice=req.tool_choice,
+                )
+        except GateBusy as e:
+            log.warning(f"Gate busy during tool recursion: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail="Server is at capacity; retry shortly or via another node.",
+                headers={"Retry-After": "5"},
+            )
+        except Exception as exc:
+            log.error(
+                f"Inference error (tool-recursion iter {_iteration_count}): {exc}",
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=502,
+                detail="upstream inference failed during tool dispatch",
+            )
+        # Re-apply the shape shim so the loop predicate is well-defined
+        # even if a monkey-patched _infer returns a plain string mid-loop.
+        if isinstance(infer_result, str):
+            infer_result = {"content": infer_result, "tool_calls": None}
+        elif not isinstance(infer_result, dict):
+            infer_result = {"content": str(infer_result), "tool_calls": None}
+
     answer = infer_result.get("content")
     tool_calls = infer_result.get("tool_calls")
 
     latency = (time.monotonic() - t0) * 1000
-    _write_audit(user, used_model, sources, latency, query_hash, req.matter_code or "")
+    _write_audit(
+        user, used_model, sources, latency, query_hash, req.matter_code or "",
+        plugin=req.plugin, skill=req.skill,
+    )
 
     # Surface citations to the UI. The audit log keeps only the count + query
     # hash; the actual chunk text is in the response only and is not persisted,

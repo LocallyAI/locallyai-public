@@ -160,10 +160,17 @@ def _atomic_write_billing_chain_state(chain: str) -> None:
 
 
 def _write_audit(user: str, model: str, sources: int, latency_ms: float,
-                 query_hash: str = "", matter_code: str = ""):
+                 query_hash: str = "", matter_code: str = "",
+                 *, plugin: str | None = None, skill: str | None = None):
     """
     audit.log  — pseudonymised user hash only (GDPR Article 25 data minimisation).
     billing.log — real user name for invoicing; admin-access only.
+
+    `plugin` / `skill` (kw-only, default None) record which claude-for-legal
+    plugin + skill was active for this turn. Defaults preserve the call
+    contract for the existing non-chat call sites (admin.py, documents.py)
+    which never set them. The fields are written only when non-None so a
+    classic chat turn (no plugin) leaves audit.log shape unchanged.
     """
     ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
@@ -203,6 +210,14 @@ def _write_audit(user: str, model: str, sources: int, latency_ms: float,
         "query_hash": query_hash,
         "matter_code": matter_code,
     }
+    # Plugin provenance: only emit the keys when set, so a classic (non-
+    # plugin) chat turn leaves audit.log JSONL shape byte-identical to the
+    # pre-Step-3 line. New keys go AFTER existing keys so the field order
+    # is stable for line-diffing audits across deployments.
+    if plugin is not None:
+        entry["plugin"] = plugin
+    if skill is not None:
+        entry["skill"] = skill
     with _ChainLock():
         prev = _prev_hash()
         entry_json = json.dumps(entry, sort_keys=True)
