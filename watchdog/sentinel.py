@@ -1,16 +1,24 @@
-from typing import Optional
-import os, json, time, threading, shutil, subprocess, urllib.request, logging
-from datetime import datetime, timezone
-from pathlib import Path
+import json
+import logging
+import os
+import shutil
+import subprocess
+import threading
+import time
+import urllib.request
 from collections import deque
+from datetime import UTC, datetime
+from pathlib import Path
 
 LOG_DIR  = Path(__file__).resolve().parent.parent / "logs"
 SENT_LOG = LOG_DIR / "sentinel.log"
 AUDIT_LOG= LOG_DIR / "audit.log"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 import sys as _sys
+
 _sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from platform_compat import chmod_safe as _chmod_safe
+
 _chmod_safe(LOG_DIR, 0o700)
 
 _logger = logging.getLogger("sentinel")
@@ -37,7 +45,7 @@ def get_alerts():
 
 def _post_alert(level, message, code):
     entry = {"level": level, "message": message, "code": code,
-             "timestamp": datetime.now(timezone.utc).isoformat()}
+             "timestamp": datetime.now(UTC).isoformat()}
     with _lock:
         existing = [a for a in _alerts if a["code"] != code]
         existing.append(entry)
@@ -172,7 +180,8 @@ class Sentinel(threading.Thread):
             _logger.warning(f"disk-pressure self-heal failed: {e}")
 
     def _probe_healthz(self) -> bool:
-        import urllib.request as _u, ssl as _s
+        import ssl as _s
+        import urllib.request as _u
         ctx = _s.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = _s.CERT_NONE
@@ -250,7 +259,8 @@ class Sentinel(threading.Thread):
         (so a flapping tag doesn't get applied on every sentinel tick)."""
         import time as _time
         try:
-            import system_updates as _su, deploy as _dep
+            import deploy as _dep
+            import system_updates as _su
             if not _su.AUTO_UPDATE_ENABLED:
                 return
             # Cheap throttle: keep last-attempt time on the instance.
@@ -373,8 +383,8 @@ class Sentinel(threading.Thread):
         # Backwards-compat: the old code path used a single retention_days
         # for everything; preserve the local variable so the rest of this
         # function keeps working without a wider refactor.
-        retention_days = audit_retention_days
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        retention_days = audit_retention_days  # noqa: F841  — kept for downstream callers
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
         try:
             last = self._LAST_ROTATE_FILE.read_text().strip()
         except OSError:
@@ -491,7 +501,7 @@ class Sentinel(threading.Thread):
             if self._BREACH_LAST_OFFSET > size:
                 # File rotated under us — start fresh.
                 self._BREACH_LAST_OFFSET = 0
-            with open(sec_log, "r", encoding="utf-8", errors="replace") as f:
+            with open(sec_log, encoding="utf-8", errors="replace") as f:
                 f.seek(self._BREACH_LAST_OFFSET)
                 tail = f.read()
                 self._BREACH_LAST_OFFSET = f.tell()
@@ -509,7 +519,7 @@ class Sentinel(threading.Thread):
                 ts_str = ev.get("timestamp", "")
                 try:
                     ts = datetime.strptime(ts_str, "%Y-%m-%dT%H:%M:%SZ").replace(
-                        tzinfo=timezone.utc).timestamp()
+                        tzinfo=UTC).timestamp()
                 except ValueError:
                     continue
                 if now - ts > self._BREACH_WINDOW_SEC:
@@ -637,7 +647,7 @@ class Sentinel(threading.Thread):
         try:
             lock_path.unlink()
             _clear_alert("WARN_QDRANT_LOCK")
-            _log.info(f"Cleaned up stale Qdrant lock ({age:.0f}s old, no process holding it)")
+            _logger.info(f"Cleaned up stale Qdrant lock ({age:.0f}s old, no process holding it)")
         except OSError as exc:
             _post_alert("warning", f"Qdrant lock file stale ({age:.0f}s old, cleanup failed: {exc})", "WARN_QDRANT_LOCK")
 
