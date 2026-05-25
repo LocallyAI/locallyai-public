@@ -1,13 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { TopBar } from "@/components/TopBar";
-import { Calendar, Download, AlertTriangle, Loader2 } from "lucide-react";
+import { Calendar, Download, AlertTriangle, Loader2, CheckCircle2, ShieldCheck, XCircle } from "lucide-react";
 import {
   getAuditSummary,
   downloadAuditCsv,
   getDetailedHealth,
+  verifyAuditChain,
   type AuditSummary,
   type AuditEntry,
+  type AuditVerifyResult,
 } from "@/lib/api";
 
 export const Route = createFileRoute("/audit")({
@@ -29,6 +31,9 @@ function AuditPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<AuditVerifyResult | null>(null);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -48,6 +53,22 @@ function AuditPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const runVerify = async () => {
+    setVerifying(true);
+    setVerifyError(null);
+    // Don't clear the previous verifyResult until we have a new one —
+    // avoids a flicker between green/red states on re-verify.
+    try {
+      const r = await verifyAuditChain();
+      setVerifyResult(r);
+    } catch (e: unknown) {
+      setVerifyResult(null);
+      setVerifyError(e instanceof Error ? e.message : "Chain verification failed");
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   const exportCsv = async () => {
     setDownloading(true);
@@ -84,6 +105,75 @@ function AuditPage() {
     <>
       <TopBar title="Audit Log" description="Tamper-evident record of all queries and document events" />
       <main className="flex-1 space-y-4 p-6">
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                <h2 className="text-sm font-semibold">Chain integrity</h2>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Walks the HMAC chain end-to-end. Any change to a past entry breaks the chain at that line.
+              </p>
+            </div>
+            <button
+              onClick={runVerify}
+              disabled={verifying}
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
+            >
+              {verifying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+              {verifying ? "Verifying…" : "Verify chain integrity"}
+            </button>
+          </div>
+          {verifyError && (
+            <div className="mt-3 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{verifyError}</span>
+            </div>
+          )}
+          {verifyResult && verifyResult.status === "ok" && (
+            <div className="mt-3 flex items-start gap-2.5 rounded-md border border-success/30 bg-success/10 px-3 py-2.5 text-sm">
+              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" />
+              <div>
+                <div className="font-semibold text-foreground">Chain intact</div>
+                <div className="text-xs text-muted-foreground">
+                  {verifyResult.entries.toLocaleString()} entries verified · node{" "}
+                  <span className="terminal-font">{verifyResult.node_id}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          {verifyResult && verifyResult.status === "TAMPERED" && (
+            <div className="mt-3 flex items-start gap-2.5 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm">
+              <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+              <div>
+                <div className="font-semibold text-destructive">
+                  Chain BROKEN at line {verifyResult.broken_at_line ?? "?"}
+                </div>
+                {verifyResult.reason && (
+                  <div className="mt-0.5 text-xs text-destructive/80">{verifyResult.reason}</div>
+                )}
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Treat this as an incident. Quarantine the audit file and check who had filesystem access since the
+                  last good verification.
+                </div>
+              </div>
+            </div>
+          )}
+          {verifyResult && verifyResult.status === "HMAC_KEY_MISSING" && (
+            <div className="mt-3 flex items-start gap-2.5 rounded-md border border-warning/40 bg-warning/10 px-3 py-2.5 text-sm">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
+              <div>
+                <div className="font-semibold text-foreground">HMAC key not configured</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  Chain verification unavailable. Set <code>LOCALLYAI_AUDIT_HMAC_KEY</code> in <code>.env</code> and
+                  restart the API.
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3">
           <div className="flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1.5">
             <Calendar className="h-3.5 w-3.5 text-muted-foreground" />

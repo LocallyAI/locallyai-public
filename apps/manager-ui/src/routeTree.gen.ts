@@ -13,7 +13,9 @@ import { Route as UsersRouteImport } from './routes/users'
 import { Route as UpdatesRouteImport } from './routes/updates'
 import { Route as SystemRouteImport } from './routes/system'
 import { Route as QueryRouteImport } from './routes/query'
+import { Route as PluginsRouteImport } from './routes/plugins'
 import { Route as ModelsRouteImport } from './routes/models'
+import { Route as McpRouteImport } from './routes/mcp'
 import { Route as DownloadsRouteImport } from './routes/downloads'
 import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as ConflictsRouteImport } from './routes/conflicts'
@@ -40,6 +42,16 @@ const SystemRoute = SystemRouteImport.update({
 const QueryRoute = QueryRouteImport.update({
   id: '/query',
   path: '/query',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PluginsRoute = PluginsRouteImport.update({
+  id: '/plugins',
+  path: '/plugins',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ModelsRoute = ModelsRouteImport.update({
@@ -91,7 +103,9 @@ export interface FileRoutesByFullPath {
   '/conflicts': typeof ConflictsRoute
   '/documents': typeof DocumentsRoute
   '/downloads': typeof DownloadsRoute
+  '/mcp': typeof McpRoute
   '/models': typeof ModelsRoute
+  '/plugins': typeof PluginsRoute
   '/query': typeof QueryRoute
   '/system': typeof SystemRoute
   '/updates': typeof UpdatesRoute
@@ -105,7 +119,9 @@ export interface FileRoutesByTo {
   '/conflicts': typeof ConflictsRoute
   '/documents': typeof DocumentsRoute
   '/downloads': typeof DownloadsRoute
+  '/mcp': typeof McpRoute
   '/models': typeof ModelsRoute
+  '/plugins': typeof PluginsRoute
   '/query': typeof QueryRoute
   '/system': typeof SystemRoute
   '/updates': typeof UpdatesRoute
@@ -120,7 +136,9 @@ export interface FileRoutesById {
   '/conflicts': typeof ConflictsRoute
   '/documents': typeof DocumentsRoute
   '/downloads': typeof DownloadsRoute
+  '/mcp': typeof McpRoute
   '/models': typeof ModelsRoute
+  '/plugins': typeof PluginsRoute
   '/query': typeof QueryRoute
   '/system': typeof SystemRoute
   '/updates': typeof UpdatesRoute
@@ -136,7 +154,9 @@ export interface FileRouteTypes {
     | '/conflicts'
     | '/documents'
     | '/downloads'
+    | '/mcp'
     | '/models'
+    | '/plugins'
     | '/query'
     | '/system'
     | '/updates'
@@ -150,7 +170,9 @@ export interface FileRouteTypes {
     | '/conflicts'
     | '/documents'
     | '/downloads'
+    | '/mcp'
     | '/models'
+    | '/plugins'
     | '/query'
     | '/system'
     | '/updates'
@@ -164,7 +186,9 @@ export interface FileRouteTypes {
     | '/conflicts'
     | '/documents'
     | '/downloads'
+    | '/mcp'
     | '/models'
+    | '/plugins'
     | '/query'
     | '/system'
     | '/updates'
@@ -179,7 +203,9 @@ export interface RootRouteChildren {
   ConflictsRoute: typeof ConflictsRoute
   DocumentsRoute: typeof DocumentsRoute
   DownloadsRoute: typeof DownloadsRoute
+  McpRoute: typeof McpRoute
   ModelsRoute: typeof ModelsRoute
+  PluginsRoute: typeof PluginsRoute
   QueryRoute: typeof QueryRoute
   SystemRoute: typeof SystemRoute
   UpdatesRoute: typeof UpdatesRoute
@@ -214,6 +240,20 @@ declare module '@tanstack/react-router' {
       path: '/query'
       fullPath: '/query'
       preLoaderRoute: typeof QueryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/plugins': {
+      id: '/plugins'
+      path: '/plugins'
+      fullPath: '/plugins'
+      preLoaderRoute: typeof PluginsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/models': {
@@ -283,7 +323,9 @@ const rootRouteChildren: RootRouteChildren = {
   ConflictsRoute: ConflictsRoute,
   DocumentsRoute: DocumentsRoute,
   DownloadsRoute: DownloadsRoute,
+  McpRoute: McpRoute,
   ModelsRoute: ModelsRoute,
+  PluginsRoute: PluginsRoute,
   QueryRoute: QueryRoute,
   SystemRoute: SystemRoute,
   UpdatesRoute: UpdatesRoute,

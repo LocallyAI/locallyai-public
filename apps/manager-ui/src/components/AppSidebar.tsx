@@ -14,6 +14,8 @@ import {
   LogOut,
   Scale,
   GitCompareArrows,
+  Puzzle,
+  Server,
 } from "lucide-react";
 import { clearAdminKey } from "@/lib/auth";
 import {
@@ -40,6 +42,8 @@ const items = [
   { title: "Compliance", url: "/compliance", icon: ShieldCheck },
   { title: "System", url: "/system", icon: Activity },
   { title: "Models", url: "/models", icon: Cpu },
+  { title: "Plugins", url: "/plugins", icon: Puzzle },
+  { title: "MCP Servers", url: "/mcp", icon: Server },
   { title: "Updates", url: "/updates", icon: RefreshCw },
   { title: "Client Apps", url: "/downloads", icon: Download },
 ];

@@ -554,6 +554,23 @@ export async function downloadAuditCsv(fromDate: string, toDate: string): Promis
   return res.blob();
 }
 
+// ── Admin: audit chain verification ──────────────────────────────────────────
+// Walks the HMAC chain end-to-end and returns "ok" only if every entry's MAC
+// matches its predecessor. "TAMPERED" pinpoints the first broken line so the
+// DPO knows where to look. "HMAC_KEY_MISSING" means the verifier never had
+// a key to check against — surface that as a setup issue, not a tamper event.
+export interface AuditVerifyResult {
+  status: "ok" | "TAMPERED" | "HMAC_KEY_MISSING";
+  entries: number;
+  node_id: string;
+  broken_at_line?: number;
+  reason?: string;
+}
+
+export async function verifyAuditChain(): Promise<AuditVerifyResult> {
+  return jsonOrThrow(await authedFetch(`/admin/audit-verify`));
+}
+
 // ── Admin: diagnostician ─────────────────────────────────────────────────────
 export interface DiagnosticianHistoryResponse {
   entries: Array<{ timestamp?: string; event?: string; detail?: string; raw?: string }>;
@@ -893,6 +910,57 @@ export async function compareDocuments(req: CompareRequest): Promise<CompareResu
       body: JSON.stringify(req),
     }),
   );
+}
+
+// ── Admin: plugin + MCP-server marketplace ──────────────────────────────────
+// Plugins are git-cloned bundles under <install>/plugins/. Each declares a
+// list of skills (chat-time tools) and a list of MCP servers it depends on.
+// Enable/disable lives in a small JSON state file on the server so the same
+// install can be reshaped per firm without touching code.
+export interface MarketplacePluginSkill {
+  name: string;
+  description: string;
+}
+
+export interface MarketplacePlugin {
+  name: string;
+  version: string;
+  description: string;
+  enabled: boolean;
+  skills: MarketplacePluginSkill[];
+  mcp_servers: string[];
+}
+
+export interface MarketplaceMcpServer {
+  name: string;
+  enabled: boolean;
+  tool_count: number;
+}
+
+export interface MarketplaceResponse {
+  plugins: MarketplacePlugin[];
+  mcp_servers: MarketplaceMcpServer[];
+  state_file: string;
+}
+
+export async function getMarketplace(): Promise<MarketplaceResponse> {
+  return jsonOrThrow(await authedFetch(`/admin/marketplace`));
+}
+
+export async function setPluginEnabled(name: string, enabled: boolean): Promise<void> {
+  const action = enabled ? "enable" : "disable";
+  const res = await authedFetch(`/admin/plugins/${encodeURIComponent(name)}/${action}`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new ApiError(res.status, (await res.text()) || `HTTP ${res.status}`);
+}
+
+export async function setMcpServerEnabled(name: string, enabled: boolean): Promise<void> {
+  const action = enabled ? "enable" : "disable";
+  const res = await authedFetch(`/admin/mcp-servers/${encodeURIComponent(name)}/${action}`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new ApiError(res.status, (await res.text()) || `HTTP ${res.status}`);
 }
 
 export { BASE_URL };
