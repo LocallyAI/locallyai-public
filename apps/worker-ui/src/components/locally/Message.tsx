@@ -20,6 +20,12 @@ export type ChatMessage = {
    *  are slow gaps between tokens (long cold-load on big models, KV
    *  pressure under concurrency, etc.). Cleared on onFinish. */
   isStreaming?: boolean;
+  /** Plugin/skill the user had selected when this turn was sent — shown
+   *  as a small provenance pill so reviewers can tell what practice
+   *  profile and skill body shaped the answer. Only meaningful on
+   *  assistant messages; persisted alongside `sources` in history. */
+  plugin?: string;
+  skill?: string;
 };
 
 export function MessageBubble({ msg }: { msg: ChatMessage }) {
@@ -71,6 +77,18 @@ export function MessageBubble({ msg }: { msg: ChatMessage }) {
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary" />
               </span>
               {t("message.generating", "Generating…")}
+            </span>
+          )}
+          {/* Plugin/skill provenance — visible only when the user had a
+              plugin active for this turn. Makes the demo obvious + lets
+              reviewers see what practice profile shaped the answer. */}
+          {msg.plugin && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 text-[10px] font-medium text-primary"
+              title={`Plugin: ${msg.plugin}${msg.skill ? ` · Skill: ${msg.skill}` : ""}`}
+            >
+              {msg.plugin}
+              {msg.skill ? ` · ${msg.skill}` : ""}
             </span>
           )}
           {/*

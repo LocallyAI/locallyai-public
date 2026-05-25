@@ -8,6 +8,7 @@ import { MessageBubble, TypingMessage, type ChatMessage } from "@/components/loc
 import { UploadDropZone } from "@/components/locally/UploadDropZone";
 import { UploadChips } from "@/components/locally/UploadChip";
 import { IngestStatusTicker } from "@/components/locally/IngestStatusTicker";
+import { PluginPicker } from "@/components/locally/PluginPicker";
 import { Toaster } from "@/components/ui/sonner";
 import {
   streamChatCompletion,
@@ -17,6 +18,7 @@ import {
   type ChatMessage as ApiChatMessage,
   type SourceCitation,
   type BrandingResponse,
+  type ModelInfo,
   ApiError,
 } from "@/lib/api";
 import { clearUserKey } from "@/lib/auth";
@@ -126,8 +128,15 @@ function Workspace() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [user, setUser] = useState<string | null>(null);
   const [model, setModel] = useState<string | null>(null);
-  const [models, setModels] = useState<string[]>([]);
+  // Full ModelInfo[] so the plugin picker can read the active model's
+  // `tool_calling` capability and gate itself accordingly. The header
+  // dropdown still renders just the id list, derived from this.
+  const [models, setModels] = useState<ModelInfo[]>([]);
   const [branding, setBranding] = useState<BrandingResponse | null>(null);
+
+  // Plugin/skill picker state — forwarded to the chat payload when set.
+  const [selectedPlugin, setSelectedPlugin] = useState<string | null>(null);
+  const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -141,7 +150,7 @@ function Workspace() {
       try {
         const m = await listModels();
         if (!cancelled) {
-          setModels(m.map((x) => x.id));
+          setModels(m);
           if (m.length > 0) setModel((current) => current ?? m[0].id);
         }
       } catch {
@@ -161,6 +170,14 @@ function Workspace() {
     () => conversations.map((c) => ({ id: c.id, title: c.title, date: c.date })),
     [conversations],
   );
+
+  // The currently active model record — used by the picker to decide
+  // whether to enable itself / show the "unverified for tools" warning.
+  // Falls back to the first model if the id pointer is stale.
+  const activeModel = useMemo<ModelInfo | null>(() => {
+    if (models.length === 0) return null;
+    return models.find((m) => m.id === model) ?? models[0];
+  }, [models, model]);
 
   const persist = (id: string, title: string, msgs: ChatMessage[]) => {
     setConversations((prev) => {
@@ -232,6 +249,12 @@ function Workspace() {
     //      isStreaming=true so MessageBubble renders a pulsing cursor
     //      after the partial content. Cleared on onFinish so the cursor
     //      disappears when generation completes.
+    // Snapshot the picker at send-time so the badge on the assistant
+    // bubble reflects what was active when the turn went out, even if
+    // the user changes the picker before the response finishes.
+    const turnPlugin = selectedPlugin ?? undefined;
+    const turnSkill = selectedSkill ?? undefined;
+
     const aiMsgId = crypto.randomUUID();
     const aiMsg: ChatMessage = {
       id: aiMsgId,
@@ -240,6 +263,8 @@ function Workspace() {
       time: nowTime(),
       sources: [],
       isStreaming: true,
+      plugin: turnPlugin,
+      skill: turnSkill,
     };
     // Don't insert the empty assistant bubble yet — TypingMessage will
     // sit in its place until the first token. This avoids the
@@ -250,7 +275,14 @@ function Workspace() {
     let finalSources: Source[] = [];
     await new Promise<void>((resolve) => {
       streamChatCompletion(
-        { messages: apiMessages, model: model ?? undefined },
+        {
+          messages: apiMessages,
+          model: model ?? undefined,
+          // Conditional spread keeps undefined fields out of the JSON.
+          // Backend tolerates either, but this keeps the wire format clean.
+          ...(turnPlugin ? { plugin: turnPlugin } : {}),
+          ...(turnSkill ? { skill: turnSkill } : {}),
+        },
         {
           onToken: (delta) => {
             acc += delta;
@@ -388,8 +420,8 @@ function Workspace() {
                 className="rounded-md border border-border bg-surface/60 px-2 py-1 text-[11px] text-foreground"
               >
                 {models.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
+                  <option key={m.id} value={m.id}>
+                    {m.id}
                   </option>
                 ))}
               </select>
@@ -415,6 +447,13 @@ function Workspace() {
 
           <IngestStatusTicker />
           <UploadChips />
+          <PluginPicker
+            selectedPlugin={selectedPlugin}
+            selectedSkill={selectedSkill}
+            onPluginChange={setSelectedPlugin}
+            onSkillChange={setSelectedSkill}
+            toolCalling={activeModel?.tool_calling}
+          />
           <Composer onSend={handleSend} disabled={view === "loading"} />
         </div>
       </main>
