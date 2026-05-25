@@ -1154,7 +1154,8 @@ echo "  Chat:      cd $DIR && $VP chat.py --key <user-key>"
 if [[ "$DEPLOY_MODE" == "demo" ]]; then
   echo "  Demo:      cd $DIR && $VP demo/run_demo.py --key <user-key>"
 fi
-echo "  Workspace: bash $DIR/apps/worker-ui/launch.sh   (opens http://localhost:5174)"
+echo "  Workspace: open '/Applications/LocallyAI Workspace.app'   (or Launchpad → 'LocallyAI')"
+echo "  Manager:   open '/Applications/LocallyAI Manager.app'"
 echo "  Audit:     bash $DIR/scripts/audit_install.sh"
 echo "  Mode:      $DEPLOY_MODE"
 if [[ -n "$QDRANT_URL_VAL" ]]; then
@@ -1183,6 +1184,46 @@ if [[ -x "$DIR/scripts/build_staff_apps.sh" ]] && command -v swiftc >/dev/null 2
   else
     echo "  ⚠ Staff app build failed (non-fatal — install.sh continues)."
     echo "    Re-run later with: bash $DIR/scripts/build_staff_apps.sh"
+  fi
+  echo ""
+fi
+
+# ── 10a-bis. Local-Mac apps in /Applications/ ────────────────────────────────
+# Same Swift WKWebView wrappers as the staff-laptop apps, but baked with
+# localhost URLs so the operator can double-click them from Launchpad
+# instead of opening a browser tab at :5173 / :5174. Replaces the
+# `bash apps/{worker,manager}-ui/launch.sh` workflow with a one-click
+# app icon. The dev servers themselves are still managed by launchd
+# (auto-restart, auto-start at login) — these apps just give the user
+# a native window to view them through.
+if command -v swiftc >/dev/null 2>&1; then
+  echo "  Building local-Mac apps (Workspace + Manager) with localhost URLs..."
+  local_built=0
+  if [[ -x "$DIR/apps/worker-desktop/build.sh" ]]; then
+    if (cd "$DIR/apps/worker-desktop" && WORKSPACE_URL="http://localhost:5174" ./build.sh >/dev/null 2>&1); then
+      rm -rf "/Applications/LocallyAI Workspace.app"
+      cp -R "$DIR/apps/worker-desktop/dist/LocallyAI Workspace.app" "/Applications/" 2>/dev/null
+      xattr -dr com.apple.quarantine "/Applications/LocallyAI Workspace.app" 2>/dev/null || true
+      local_built=$((local_built + 1))
+    fi
+  fi
+  if [[ -x "$DIR/apps/manager-desktop/build.sh" ]]; then
+    if (cd "$DIR/apps/manager-desktop" && MANAGER_URL="http://localhost:5173" ./build.sh >/dev/null 2>&1); then
+      rm -rf "/Applications/LocallyAI Manager.app"
+      cp -R "$DIR/apps/manager-desktop/dist/LocallyAI Manager.app" "/Applications/" 2>/dev/null
+      xattr -dr com.apple.quarantine "/Applications/LocallyAI Manager.app" 2>/dev/null || true
+      local_built=$((local_built + 1))
+    fi
+  fi
+  if [[ "$local_built" -ge 1 ]]; then
+    echo "  ✓ ${local_built} local app(s) installed to /Applications/"
+    echo "    → Launchpad: search 'LocallyAI'"
+    echo "    → or: open '/Applications/LocallyAI Workspace.app'"
+    echo "    → or: open '/Applications/LocallyAI Manager.app'"
+  else
+    echo "  ⚠ Local-app build failed (non-fatal). Re-run later:"
+    echo "    bash $DIR/apps/worker-desktop/build.sh && cp -R $DIR/apps/worker-desktop/dist/'LocallyAI Workspace.app' /Applications/"
+    echo "    bash $DIR/apps/manager-desktop/build.sh && cp -R $DIR/apps/manager-desktop/dist/'LocallyAI Manager.app' /Applications/"
   fi
   echo ""
 fi
