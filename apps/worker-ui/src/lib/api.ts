@@ -513,19 +513,6 @@ export function streamChatCompletion(
   return ctrl;
 }
 
-export interface ModelInfo {
-  id: string;
-  object: string;
-  owned_by: string;
-}
-
-export async function listModels(): Promise<ModelInfo[]> {
-  const res = await authedFetch(`/v1/models`);
-  if (!res.ok) throw new ApiError(res.status, await res.text());
-  const data = (await res.json()) as { object: string; data: ModelInfo[] };
-  return data.data;
-}
-
 export interface IngestResponse {
   status: string;
   stored_as: string;
