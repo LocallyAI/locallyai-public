@@ -42,11 +42,14 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from api._shared import (
+    _admin_auth,
     _auth,
     _write_security_log,
     looks_like_prompt_injection,
     sanitize_markdown_body,
 )
+from config import SHARED_DIR
+from shared_lock import shared_lock
 
 log = logging.getLogger("api")
 
@@ -82,6 +85,72 @@ class PluginSpec:
 # ── Registry (populated by load_plugins_from_dir at startup) ──────────────────
 
 _PLUGIN_REGISTRY: dict[str, PluginSpec] = {}
+
+# ── Enable/disable state (Manager UI marketplace) ────────────────────────────
+# Persisted to SHARED_DIR (Syncthing-replicated on multi-Mac fleets) so
+# enabling a plugin on Mac A propagates to Mac B without a re-deploy.
+# Schema: {"plugins": {"<name>": bool, ...}, "mcp_servers": {"<name>": bool, ...}}
+# Missing entries default to ENABLED (a fresh install with no overrides has
+# every loaded plugin + every MCP server live — least-surprise for the demo
+# path). Disabling writes the file with that entry set to False.
+_MARKETPLACE_STATE_FILE = SHARED_DIR / "marketplace_state.json"
+_KNOWN_MCP_SERVERS = (
+    "mcp-locallyai-search",
+    "mcp-locallyai-audit",
+    "mcp-locallyai-matter",
+    "mcp-locallyai-citation",
+)
+
+
+def _read_marketplace_state() -> dict:
+    """Read the marketplace toggle state. Returns the default-empty dict
+    if the file doesn't exist or is malformed. Caller does NOT need to
+    hold the shared lock for read-only access."""
+    if not _MARKETPLACE_STATE_FILE.exists():
+        return {"plugins": {}, "mcp_servers": {}}
+    try:
+        data = json.loads(_MARKETPLACE_STATE_FILE.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {"plugins": {}, "mcp_servers": {}}
+        data.setdefault("plugins", {})
+        data.setdefault("mcp_servers", {})
+        return data
+    except (OSError, json.JSONDecodeError) as e:
+        log.warning(f"plugins: marketplace state unreadable, defaulting to all-enabled: {e}")
+        return {"plugins": {}, "mcp_servers": {}}
+
+
+def _write_marketplace_state(state: dict) -> None:
+    """Atomic write through shared_lock so a Syncthing-replicated fleet
+    doesn't race on concurrent toggles. tmp + rename."""
+    SHARED_DIR.mkdir(parents=True, exist_ok=True)
+    with shared_lock(_MARKETPLACE_STATE_FILE, timeout=5.0):
+        tmp = _MARKETPLACE_STATE_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+        tmp.replace(_MARKETPLACE_STATE_FILE)
+
+
+def is_plugin_enabled(name: str) -> bool:
+    """Default-enabled: only False if the marketplace state file explicitly
+    sets the plugin to False. Keeps the demo path working out-of-the-box."""
+    return _read_marketplace_state()["plugins"].get(name, True)
+
+
+def is_mcp_enabled(name: str) -> bool:
+    """Default-enabled (same reasoning as is_plugin_enabled)."""
+    return _read_marketplace_state()["mcp_servers"].get(name, True)
+
+
+def set_plugin_enabled(name: str, enabled: bool) -> None:
+    state = _read_marketplace_state()
+    state["plugins"][name] = bool(enabled)
+    _write_marketplace_state(state)
+
+
+def set_mcp_enabled(name: str, enabled: bool) -> None:
+    state = _read_marketplace_state()
+    state["mcp_servers"][name] = bool(enabled)
+    _write_marketplace_state(state)
 
 
 def _strip_html_comments(text: str) -> str:
@@ -251,31 +320,46 @@ def load_plugins_from_dir(path: Path) -> dict[str, PluginSpec]:
 
 
 def get_plugin(name: str) -> Optional[PluginSpec]:
-    return _PLUGIN_REGISTRY.get(name)
+    """Return the plugin spec if loaded AND enabled in the marketplace state.
+    Disabled plugins are invisible to the chat handler — same effect as
+    not being installed. The Marketplace UI sees them via list_plugins()
+    which honours the include_disabled flag."""
+    spec = _PLUGIN_REGISTRY.get(name)
+    if spec is None:
+        return None
+    if not is_plugin_enabled(name):
+        return None
+    return spec
 
 
 def get_skill(plugin: str, skill: str) -> Optional[SkillSpec]:
-    spec = _PLUGIN_REGISTRY.get(plugin)
+    spec = get_plugin(plugin)
     if spec is None:
         return None
     return spec.skills.get(skill)
 
 
-def list_plugins() -> list[dict]:
-    """Serialisable view of the registry — used by GET /v1/plugins."""
-    return [
-        {
+def list_plugins(include_disabled: bool = False) -> list[dict]:
+    """Serialisable view of the registry — used by GET /v1/plugins (chat
+    consumers, enabled-only) and the marketplace endpoint
+    (include_disabled=True so admins see everything)."""
+    out: list[dict] = []
+    for spec in sorted(_PLUGIN_REGISTRY.values(), key=lambda s: s.name):
+        enabled = is_plugin_enabled(spec.name)
+        if not enabled and not include_disabled:
+            continue
+        out.append({
             "name": spec.name,
             "version": spec.version,
             "description": spec.description,
+            "enabled": enabled,
             "skills": [
                 {"name": s.name, "description": s.description}
                 for s in spec.skills.values()
             ],
             "mcp_servers": spec.declared_mcp_servers,
-        }
-        for spec in sorted(_PLUGIN_REGISTRY.values(), key=lambda s: s.name)
-    ]
+        })
+    return out
 
 
 # ── Chat-handler integration helpers ──────────────────────────────────────────
@@ -326,6 +410,11 @@ def builtin_tool_defs(active_plugin: Optional[PluginSpec]) -> list[dict]:
     ]:
         if server_name not in declared:
             continue
+        # Marketplace toggle: the admin can disable individual MCP servers
+        # without uninstalling them. Disabled = invisible to the model
+        # (same effect as the plugin not declaring it).
+        if not is_mcp_enabled(server_name):
+            continue
         try:
             mod = __import__(module_path, fromlist=["TOOL_DEFS"])
         except ImportError:
@@ -351,11 +440,11 @@ def dispatch_builtin_tool(
     order: search, audit, matter, citation. Plugins should not declare
     overlapping tool names; the loader rejects duplicate-name plugins later.
     """
-    for module_path in (
-        "mcp_servers.search.server",
-        "mcp_servers.audit.server",
-        "mcp_servers.matter.server",
-        "mcp_servers.citation.server",
+    for server_name, module_path in (
+        ("mcp-locallyai-search", "mcp_servers.search.server"),
+        ("mcp-locallyai-audit", "mcp_servers.audit.server"),
+        ("mcp-locallyai-matter", "mcp_servers.matter.server"),
+        ("mcp-locallyai-citation", "mcp_servers.citation.server"),
     ):
         try:
             mod = __import__(module_path, fromlist=["DISPATCH"])
@@ -363,6 +452,12 @@ def dispatch_builtin_tool(
             continue
         dispatch = getattr(mod, "DISPATCH", None)
         if isinstance(dispatch, dict) and name in dispatch:
+            # Marketplace gate — refuse dispatch on disabled MCP servers
+            # even if the model somehow guessed the tool name. The toggle
+            # is the source of truth, not just whether the tool def was
+            # surfaced.
+            if not is_mcp_enabled(server_name):
+                return {"error": f"tool '{name}' belongs to disabled MCP server '{server_name}'"}
             try:
                 return dispatch[name](arguments, user=user, matter_code=matter_code)
             except Exception as exc:
@@ -404,3 +499,86 @@ def get_skill_endpoint(
         "description": spec.description,
         "body_md": spec.body_md,
     }
+
+
+# ── Marketplace endpoints (admin-only) ────────────────────────────────────────
+
+
+@router.get("/admin/marketplace")
+def admin_marketplace(key=Depends(_admin_auth)) -> dict:
+    """Manager UI's plugin + MCP-server marketplace view. Returns the FULL
+    installed catalogue, including disabled entries, with their current
+    enabled state. /v1/plugins by contrast hides disabled plugins
+    (matches what chat consumers see)."""
+    return {
+        "plugins": list_plugins(include_disabled=True),
+        "mcp_servers": [
+            {
+                "name": srv,
+                "enabled": is_mcp_enabled(srv),
+                # tool count is best-effort — if the module isn't importable
+                # (e.g. an older deployment), count 0.
+                "tool_count": _safe_tool_count(srv),
+            }
+            for srv in _KNOWN_MCP_SERVERS
+        ],
+        "state_file": str(_MARKETPLACE_STATE_FILE),
+    }
+
+
+def _safe_tool_count(server_name: str) -> int:
+    module_map = {
+        "mcp-locallyai-search":   "mcp_servers.search.server",
+        "mcp-locallyai-audit":    "mcp_servers.audit.server",
+        "mcp-locallyai-matter":   "mcp_servers.matter.server",
+        "mcp-locallyai-citation": "mcp_servers.citation.server",
+    }
+    module_path = module_map.get(server_name)
+    if not module_path:
+        return 0
+    try:
+        mod = __import__(module_path, fromlist=["TOOL_DEFS"])
+    except ImportError:
+        return 0
+    defs = getattr(mod, "TOOL_DEFS", None)
+    return len(defs) if isinstance(defs, list) else 0
+
+
+@router.post("/admin/plugins/{name}/enable")
+def admin_enable_plugin(name: str, key=Depends(_admin_auth)) -> dict:
+    if not _NAME_PATTERN.match(name):
+        raise HTTPException(status_code=400, detail="invalid plugin name")
+    if name not in _PLUGIN_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"plugin not installed: {name}")
+    set_plugin_enabled(name, True)
+    log.info(f"plugins: marketplace ENABLE plugin={name}")
+    return {"plugin": name, "enabled": True}
+
+
+@router.post("/admin/plugins/{name}/disable")
+def admin_disable_plugin(name: str, key=Depends(_admin_auth)) -> dict:
+    if not _NAME_PATTERN.match(name):
+        raise HTTPException(status_code=400, detail="invalid plugin name")
+    if name not in _PLUGIN_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"plugin not installed: {name}")
+    set_plugin_enabled(name, False)
+    log.info(f"plugins: marketplace DISABLE plugin={name}")
+    return {"plugin": name, "enabled": False}
+
+
+@router.post("/admin/mcp-servers/{name}/enable")
+def admin_enable_mcp(name: str, key=Depends(_admin_auth)) -> dict:
+    if name not in _KNOWN_MCP_SERVERS:
+        raise HTTPException(status_code=404, detail=f"unknown MCP server: {name}")
+    set_mcp_enabled(name, True)
+    log.info(f"plugins: marketplace ENABLE mcp_server={name}")
+    return {"mcp_server": name, "enabled": True}
+
+
+@router.post("/admin/mcp-servers/{name}/disable")
+def admin_disable_mcp(name: str, key=Depends(_admin_auth)) -> dict:
+    if name not in _KNOWN_MCP_SERVERS:
+        raise HTTPException(status_code=404, detail=f"unknown MCP server: {name}")
+    set_mcp_enabled(name, False)
+    log.info(f"plugins: marketplace DISABLE mcp_server={name}")
+    return {"mcp_server": name, "enabled": False}

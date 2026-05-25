@@ -1055,6 +1055,33 @@ popd >/dev/null
 PROBE_URL="http://localhost:8000/healthz"
 [[ -f "$TLS_DIR/cert.pem" ]] && PROBE_URL="https://localhost:8000/healthz"
 
+# ── 9c-bis. Default plugin pack ──────────────────────────────────────────────
+# Clones LocallyAI's adapted UK legal plugin set (ip-legal / privacy-legal /
+# litigation-legal — Apache 2.0, forked from anthropics/claude-for-legal) into
+# $DIR/plugins/. The startup handler in api/__init__.py picks them up
+# automatically from BASE_DIR/plugins. Skipped if the directory already exists
+# (idempotent — re-running install.sh won't clobber a hand-curated plugin set
+# or pull updates without consent; firms run `git -C plugins pull` to update).
+PLUGINS_DIR="$DIR/plugins"
+PLUGINS_REPO="${LOCALLYAI_PLUGINS_REPO:-https://github.com/LocallyAI/locallyai-plugins-uk-public.git}"
+if [[ -d "$PLUGINS_DIR" ]]; then
+  info "Plugin pack already present at $PLUGINS_DIR — skipping clone"
+  if [[ -d "$PLUGINS_DIR/.git" ]]; then
+    ok "  ($(cd "$PLUGINS_DIR" && git log -1 --format='%h %s' 2>/dev/null || echo 'non-git directory'))"
+  fi
+else
+  info "Cloning default plugin pack from $PLUGINS_REPO ..."
+  if git clone --depth 1 "$PLUGINS_REPO" "$PLUGINS_DIR" 2>&1 | tail -n 3; then
+    local_n=$(find "$PLUGINS_DIR" -maxdepth 2 -name "plugin.json" 2>/dev/null | wc -l | tr -d ' ')
+    ok "Plugin pack installed: $local_n plugin(s) under $PLUGINS_DIR"
+    ok "  → manage via Manager UI → Plugins tab, or POST /v1/admin/plugins/{name}/{enable,disable}"
+  else
+    warn "Plugin pack clone failed (no internet or repo not yet public?)"
+    warn "  → install plugins later: git clone $PLUGINS_REPO $PLUGINS_DIR"
+    warn "  → the rest of install continues without plugins; chat works generically"
+  fi
+fi
+
 # ── 9d. Build the worker UI ──────────────────────────────────────────────────
 # This is a TanStack Start app (Cloudflare Workers + SSR). After build it
 # produces dist/client/ and dist/server/wrangler.json; launch.sh serves it via
