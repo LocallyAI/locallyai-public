@@ -860,26 +860,47 @@ def chat(request: Request,
     # tool we can't run.
     _MAX_TOOL_ITERATIONS = 3
     _iteration_count = 0
-    # Snapshot which tool names are in-process. Computed once per request
-    # rather than per-iteration so a flaky import doesn't change the
-    # answer mid-recursion.
+    # Auto-recursion gate: only intercept tool_calls when this is a
+    # plugin-driven chat (req.plugin set). Without a plugin the caller
+    # owns the tool dispatch (standard OpenAI behaviour) — the audit-agent
+    # and any other agent using LocallyAI as a model gateway expects to
+    # receive tool_calls in the response and dispatch them itself.
+    # Previously we always auto-dispatched any tool name matching our
+    # in-process MCPs, which silently broke caller-managed agents that
+    # happened to use the same tool names (e.g. log_search exists both
+    # in the audit-agent and in mcp-locallyai-audit).
+    _auto_dispatch_active = bool(req.plugin)
     _in_process_names: set[str] = set()
-    for _srv_mod_path in (
-        "mcp_servers.search.server",
-        "mcp_servers.audit.server",
-        "mcp_servers.matter.server",
-        "mcp_servers.citation.server",
-    ):
-        try:
-            _srv_mod = __import__(_srv_mod_path, fromlist=["DISPATCH"])
-        except ImportError:
-            continue
-        _srv_dispatch = getattr(_srv_mod, "DISPATCH", None)
-        if isinstance(_srv_dispatch, dict):
-            _in_process_names.update(_srv_dispatch.keys())
+    if _auto_dispatch_active:
+        # Snapshot which tool names are in-process. Computed once per
+        # request rather than per-iteration so a flaky import doesn't
+        # change the answer mid-recursion. Tools the caller supplied
+        # explicitly in req.tools are EXCLUDED from auto-dispatch — even
+        # under an active plugin, the caller's own tools take precedence
+        # on name collision (the merge above already gave them priority
+        # for the schema; the dispatch path matches that).
+        _caller_tool_names = {
+            (t.get("function") or {}).get("name", "")
+            for t in (req.tools or [])
+        }
+        for _srv_mod_path in (
+            "mcp_servers.search.server",
+            "mcp_servers.audit.server",
+            "mcp_servers.matter.server",
+            "mcp_servers.citation.server",
+        ):
+            try:
+                _srv_mod = __import__(_srv_mod_path, fromlist=["DISPATCH"])
+            except ImportError:
+                continue
+            _srv_dispatch = getattr(_srv_mod, "DISPATCH", None)
+            if isinstance(_srv_dispatch, dict):
+                _in_process_names.update(_srv_dispatch.keys())
+        _in_process_names -= _caller_tool_names
 
     while (
-        isinstance(infer_result, dict)
+        _auto_dispatch_active
+        and isinstance(infer_result, dict)
         and infer_result.get("tool_calls")
     ):
         if _iteration_count >= _MAX_TOOL_ITERATIONS:
