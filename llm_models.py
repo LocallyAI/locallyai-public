@@ -177,11 +177,30 @@ def select(model_id: str) -> dict:
     """Validate, kick off background download if needed, swap .env on
     success, restart API. Returns immediately with `accepted: true` once
     the model is known + the download started; the manager UI polls
-    download_status() to track progress."""
+    download_status() to track progress.
+
+    Air-gap mode (LOCALLYAI_AIR_GAP=1): if the model isn't already
+    cached locally, refuse the request. Air-gap firms side-load model
+    files via rsync from a trusted mirror before selecting them."""
     global _download_in_flight
     valid = next((m for m in CURATED if m.id == model_id), None)
     if not valid:
         return {"accepted": False, "detail": f"Unknown model id: {model_id} (off curated list)"}
+
+    # Air-gap mode: refuse download. Already-cached models are still
+    # selectable because no network is touched in that path.
+    try:
+        from config import AIR_GAP as _AIR_GAP
+    except ImportError:
+        _AIR_GAP = False
+    if _AIR_GAP and not _is_downloaded(model_id):
+        return {
+            "accepted": False,
+            "detail": f"Air-gap mode (LOCALLYAI_AIR_GAP=1): {model_id} is not "
+                      f"in the local HuggingFace cache. Side-load it manually "
+                      f"(rsync from a trusted mirror) before selecting. See "
+                      f"docs/sop/air-gap-mode.md.",
+        }
 
     with _download_lock:
         if _download_in_flight and _download_in_flight != model_id:

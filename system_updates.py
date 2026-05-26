@@ -328,7 +328,15 @@ def verify_manifest(tag: str, manifest: ReleaseManifest) -> tuple[bool, str]:
 
 # ── Channel filter + soak window ────────────────────────────────────────────
 def _list_remote_tags() -> list[str]:
-    """`gh release list` returns newest-first. Filter to our channel."""
+    """`gh release list` returns newest-first. Filter to our channel.
+    Returns empty when LOCALLYAI_AIR_GAP=1 — the entire vendor-reach is
+    skipped + the Manager UI's Updates tab shows 'no updates available'."""
+    try:
+        from config import AIR_GAP as _AIR_GAP
+    except ImportError:
+        _AIR_GAP = False
+    if _AIR_GAP:
+        return []
     if not shutil.which("gh"):
         return []
     try:

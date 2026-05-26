@@ -93,6 +93,18 @@ def _fetch() -> tuple[dict | None, str | None]:
     now = time.time()
     if (now - _cache["fetched_at"]) < _CACHE_TTL_SEC and (_cache["payload"] or _cache["error"]):
         return _cache["payload"], _cache["error"]
+    # Air-gap mode: never reach the vendor. Cached as a benign "no-op"
+    # so callers in the same process don't re-evaluate every loop.
+    # See config.AIR_GAP for the trade-off documentation.
+    try:
+        from config import AIR_GAP as _AIR_GAP
+    except ImportError:
+        _AIR_GAP = False
+    if _AIR_GAP:
+        _cache["payload"] = None
+        _cache["error"] = "air-gap mode (LOCALLYAI_AIR_GAP=1)"
+        _cache["fetched_at"] = now
+        return None, _cache["error"]
     try:
         # 1) Fetch the payload.
         req = urllib.request.Request(KILL_SWITCH_URL, headers={

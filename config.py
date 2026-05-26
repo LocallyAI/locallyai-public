@@ -16,6 +16,29 @@ BASE_DIR     = Path(__file__).parent
 NODE_ID = _os.environ.get("LOCALLYAI_NODE_ID", "").strip() or _socket.gethostname()
 
 
+# ── Air-gap mode ──────────────────────────────────────────────────────────────
+# When LOCALLYAI_AIR_GAP=1, every code path that would otherwise reach the
+# public internet is short-circuited:
+#   * kill_switch._fetch() returns (None, "air-gap mode") without hitting
+#     Cloudflare. The firm trades vendor-issued emergency stops for
+#     immunity to a forged kill-switch flip.
+#   * system_updates.list_available() returns empty — no git fetch --tags,
+#     no manifest pulls. Manager UI's Updates tab shows
+#     "no updates available (air-gap mode)".
+#   * llm_models.download_model() raises before the HF / Ollama hit —
+#     firm side-loads model files manually (rsync from a known-good
+#     mirror, USB stick, etc).
+#
+# Trade-off the firm explicitly accepts:
+#   - No automatic security patches: stay on installed release OR run
+#     `git pull` against a trusted mirror controlled by the firm.
+#   - No vendor-issued kill-switch: a known-bad release cannot be
+#     centrally frozen; firm relies on its own SIEM.
+#   - Reduced operational signal: vendor telemetry channels disabled.
+# See docs/sop/air-gap-mode.md for the full risk discussion.
+AIR_GAP = _os.environ.get("LOCALLYAI_AIR_GAP", "0").strip() in ("1", "true", "yes", "on")
+
+
 # ── Data residency / compliance region ────────────────────────────────────────
 # Tells the deployment which regulatory framework applies. Stamped into every
 # audit + billing entry (inside the HMAC payload, so a forged region breaks
