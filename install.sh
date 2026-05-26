@@ -772,7 +772,13 @@ if [[ -f "$ENV_FILE" ]]; then
   ensure_env_var QDRANT_URL               "$QDRANT_URL_VAL"
   ensure_env_var LOCALLYAI_KILL_SWITCH_URL ""
   ensure_env_var LOCALLYAI_KILL_SWITCH_REQUIRED "1"
-  ensure_env_var LOCALLYAI_AUTO_UPDATE    "on"
+  # Default OFF — auto-updates bypass the firm's change-management
+  # policy. Operator opts in by setting LOCALLYAI_AUTO_UPDATE=on after
+  # they've reviewed docs/sop/updates.md + the kill-switch story.
+  # Manager UI → Updates tab still surfaces available releases and
+  # the operator can apply them with one click; this default just
+  # prevents tier-A auto-apply on a schedule.
+  ensure_env_var LOCALLYAI_AUTO_UPDATE    "off"
   ensure_env_var LOCALLYAI_AUTO_UPDATE_TIERS "A"
   # Don't overwrite firm-supplied values for these — only set if missing.
   ensure_env_var LOCALLYAI_FIRM_NAME      "$LOCALLYAI_FIRM_NAME"

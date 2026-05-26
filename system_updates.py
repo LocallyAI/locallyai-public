@@ -70,10 +70,14 @@ if UPDATE_CHANNEL not in ("stable", "dev"):
     log.warning("Unknown LOCALLYAI_UPDATE_CHANNEL=%r; falling back to stable", UPDATE_CHANNEL)
     UPDATE_CHANNEL = "stable"
 
-# Per-tier opt-out. Firms can pin to manual mode entirely with
-# LOCALLYAI_AUTO_UPDATE=off, OR enable only specific tiers via
-# LOCALLYAI_AUTO_UPDATE_TIERS=A,B (default A).
-AUTO_UPDATE_ENABLED = os.environ.get("LOCALLYAI_AUTO_UPDATE", "on").lower() != "off"
+# Per-tier opt-in. Default OFF so auto-apply never bypasses the firm's
+# change-management policy. Operator opts in via
+# LOCALLYAI_AUTO_UPDATE=on (typically only after reviewing the kill-
+# switch + signing chain in docs/sop/updates.md). Even with auto-update
+# disabled, the Manager UI's Updates tab surfaces available releases
+# and a one-click "Apply" still works — the only thing the default-off
+# disables is the unattended-cron path.
+AUTO_UPDATE_ENABLED = os.environ.get("LOCALLYAI_AUTO_UPDATE", "off").lower() == "on"
 AUTO_UPDATE_TIERS = {
     t.strip().upper() for t in
     os.environ.get("LOCALLYAI_AUTO_UPDATE_TIERS", "A").split(",")
