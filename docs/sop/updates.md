@@ -40,17 +40,27 @@ firms, branch protection enforcement via GitHub API.
 Every release is classified by **blast radius**, declared in
 `release_manifest.json` and shown in the manager UI:
 
-| Tier | Examples | Auto-apply default | UI surfacing |
+| Tier | Examples | Auto-apply (when AUTO_UPDATE=on) | UI surfacing |
 |---|---|---|---|
-| **A** — security / critical | CVE patch, audit-chain bug fix, key-handling fix | Yes (sentinel applies within 6 h) | Banner: "applied automatically" |
+| **A** — security / critical | CVE patch, audit-chain bug fix, key-handling fix | Yes (sentinel applies within 6 h) | Banner: "Update available — apply or wait for auto-apply" |
 | **B** — feature / improvement | New endpoint, UI redesign, model-picker addition | No (operator clicks Apply) | Banner: "Update available" |
 | **C** — breaking / manual | Schema migration, API contract change | No (vendor coordinates window) | Banner: "Manual coordination required — contact vendor" |
 
-Per-tier opt-out via env on the firm's office Mac:
+**Default: `LOCALLYAI_AUTO_UPDATE=off`** (as of 2026-05-26). Auto-apply
+is opt-in. The Manager UI's Updates tab still surfaces every
+available release with full trust signals (GPG verify, manifest SHA
+match, soak time, kill-switch status) — the operator clicks "Apply"
+to deploy. Setting `AUTO_UPDATE=on` lets tier-A releases land within
+~6 hours of vendor publication without operator input; opt in only
+after reviewing the kill-switch + signing chain. The default was
+flipped from "on" because auto-apply bypasses change-management
+policies even when the release is verified.
+
+Per-tier env on the firm's office Mac:
 
 ```
-LOCALLYAI_AUTO_UPDATE=on            # default; off = pin everything to manual
-LOCALLYAI_AUTO_UPDATE_TIERS=A       # default; A,B = also auto-apply tier B
+LOCALLYAI_AUTO_UPDATE=off           # default; opt-in to "on"
+LOCALLYAI_AUTO_UPDATE_TIERS=A       # only consulted when AUTO_UPDATE=on; A,B = also auto-apply tier B
 LOCALLYAI_UPDATE_CHANNEL=stable     # default; dev = subscribe to dev releases
 ```
 
