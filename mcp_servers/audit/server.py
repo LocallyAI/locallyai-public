@@ -36,13 +36,36 @@ DESCRIPTION = (
 
 
 def _resolve_log_path() -> Path:
-    """Late-import so module import has no side effects and so tests can
-    monkeypatch `api._shared.AUDIT_LOG`."""
+    """Late-binding path resolution.
+
+    Order of precedence (per-call, NOT cached) so an eval harness can
+    point at a fixture between requests, or an operator can rotate the
+    log via env without an API restart:
+
+      1. `LOCALLYAI_AUDIT_LOG` env (absolute path to a specific file)
+      2. `api._shared.AUDIT_LOG` (set at startup from LOCALLYAI_LOG_DIR)
+
+    Without per-call resolution, the audit-agent eval suite always
+    sees the live log instead of the dataset's clean/tampered fixture
+    — counts come back wrong even when the model's reasoning is right.
+    """
+    import os
+    env_path = os.environ.get("LOCALLYAI_AUDIT_LOG", "").strip()
+    if env_path:
+        return Path(env_path)
     from api import _shared
     return _shared.AUDIT_LOG
 
 
 def _load_hmac_key() -> bytes:
+    """Late-binding HMAC key resolution. Honours `LOCALLYAI_AUDIT_HMAC_KEY`
+    per-call (same reasoning as `_resolve_log_path`) so an eval harness
+    that hands the agent a different fixture log + the matching key
+    isn't fighting cached state."""
+    import os
+    env_key = os.environ.get("LOCALLYAI_AUDIT_HMAC_KEY", "").strip()
+    if env_key:
+        return env_key.encode()
     from api import _shared
     return _shared._AUDIT_HMAC_KEY
 
